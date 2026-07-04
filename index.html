@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TrueLedger — Know Your Real Prediction Market P&L</title>
+<title>TruePL — Know Your Real Prediction Market P&L</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
@@ -118,7 +118,7 @@ html{scroll-behavior:smooth}
 <body>
 
 <div class="topbar" id="analyzer">
-  <div class="logo">True<span>Ledger</span></div>
+  <div class="logo">True<span>PL</span></div>
   <a href="#" onclick="openBug();return false" style="color:var(--muted);font-size:.78rem;text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;order:3">🐞 Report a bug</a>
   <div class="tabs">
     <button class="tab active" data-tab="kalshi">Kalshi</button>
@@ -299,7 +299,7 @@ Jul 3, 2026
 <div class="hero">
   <div class="badge">FOR KALSHI &amp; PREDICTION MARKET TRADERS</div>
   <h1>Your exchange says you made money.<br><em>Did you really?</em></h1>
-  <p>Kalshi's export labels gross payout as "profit" — it can overstate your results by thousands. TrueLedger computes your real P&amp;L from cost basis, fees included, in seconds.</p>
+  <p>Kalshi's export labels gross payout as "profit" — it can overstate your results by thousands. TruePL computes your real P&amp;L from cost basis, fees included, in seconds.</p>
   <a class="cta big" href="#analyzer">Get my true P&amp;L — free</a>
 </div>
 
@@ -339,7 +339,7 @@ Jul 3, 2026
 <section style="padding-bottom:0">
   <div class="privacy-band">
     <h3>🔒 Your data never leaves your computer</h3>
-    <p>TrueLedger is a single page that runs 100% in your browser. Nothing is uploaded, stored, or tracked. Close the tab and it's gone. That's not a promise buried in a privacy policy — there's simply no server to send anything to.</p>
+    <p>TruePL is a single page that runs 100% in your browser. Nothing is uploaded, stored, or tracked. Close the tab and it's gone. That's not a promise buried in a privacy policy — there's simply no server to send anything to.</p>
   </div>
 </section>
 
@@ -885,7 +885,7 @@ $('bugSend').addEventListener('click', async ()=>{
   const what = $('bugWhat').value.trim();
   if (!what){ $('bugStatus').textContent = 'Please describe what happened.'; $('bugStatus').style.color='#f87171'; return; }
   const activeTab = document.querySelector('.tab.active');
-  const payload = {what, email: $('bugEmail').value.trim(), venue: activeTab ? activeTab.textContent : '', browser: navigator.userAgent, page: 'TrueLedger analyzer'};
+  const payload = {what, email: $('bugEmail').value.trim(), venue: activeTab ? activeTab.textContent : '', browser: navigator.userAgent, page: 'TruePL analyzer'};
   $('bugSend').disabled = true; $('bugStatus').style.color = 'var(--muted)'; $('bugStatus').textContent = 'Sending…';
   try {
     if (BUG_ENDPOINT.includes('YOUR_FORM_ID')) throw new Error('form not configured');
@@ -914,7 +914,7 @@ $('bugSend').addEventListener('click', async ()=>{
     <div id="bugStatus" style="font-size:.8rem;margin-top:10px;min-height:1.1em"></div>
   </div>
 </div>
-<footer style="border-top:1px solid var(--border);margin-top:48px;padding:20px 0;color:var(--muted);font-size:.76rem;text-align:center">TrueLedger &middot; runs entirely in your browser &middot; <a href="#" onclick="openBug();return false" style="color:#60a5fa">report a bug</a> &middot; not affiliated with any exchange &middot; not financial advice</footer>
+<footer style="border-top:1px solid var(--border);margin-top:48px;padding:20px 0;color:var(--muted);font-size:.76rem;text-align:center">TruePL &middot; runs entirely in your browser &middot; <a href="#" onclick="openBug();return false" style="color:#60a5fa">report a bug</a> &middot; not affiliated with any exchange &middot; not financial advice</footer>
 <script>
 // Collapse marketing section once any dashboard is shown; restore on reset
 (function(){
