@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrueLedger — Know Your Real Prediction Market P&L</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{--bg:#0e1117;--card:#171b24;--border:#262b38;--text:#e6e9f0;--muted:#8b93a7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;padding:24px;max-width:1280px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:4px}
+.sub{color:var(--muted);font-size:.85rem;margin-bottom:20px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.kpi .label{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.kpi .value{font-size:1.35rem;font-weight:600}
+.kpi .detail{color:var(--muted);font-size:.75rem;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card h2{font-size:.9rem;font-weight:600;margin-bottom:12px}
+.span8{grid-column:span 8}.span6{grid-column:span 6}.span4{grid-column:span 4}.span12{grid-column:span 12}
+@media(max-width:900px){.span8,.span6,.span4{grid-column:span 12}}
+.chart-box{position:relative;height:260px}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border);text-transform:uppercase;font-size:.68rem;letter-spacing:.05em}
+td{padding:8px 10px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.68rem;background:#232a3b;color:#60a5fa}
+.ticker{font-size:.78rem;color:var(--text);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.note{background:#1c2130;border:1px solid #2c3550;border-radius:10px;padding:12px 16px;font-size:.8rem;color:var(--muted);margin-bottom:20px}
+.note b{color:#fbbf24}
+#landing{max-width:640px;margin:8vh auto;text-align:center}
+#landing h1{font-size:2rem;margin-bottom:10px}
+#landing .tag{color:var(--muted);font-size:1rem;margin-bottom:28px;line-height:1.5}
+.dropgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:560px){.dropgrid{grid-template-columns:1fr}}
+.drop{border:2px dashed #3b4359;border-radius:14px;padding:34px 18px;cursor:pointer;transition:all .15s;background:var(--card)}
+.drop:hover,.drop.over{border-color:#60a5fa;background:#1a2030}
+.drop.loaded{border-style:solid;border-color:#4ade80;background:#101d16}
+.drop .ico{font-size:1.6rem;margin-bottom:8px}
+.drop .big{font-size:1.02rem;font-weight:600;margin-bottom:4px}
+.drop .small{color:var(--muted);font-size:.8rem;margin-bottom:10px}
+.drop .state{font-size:.78rem;color:#3b4359;color:var(--muted);border-top:1px solid var(--border);padding-top:10px}
+.drop.loaded .state{color:#4ade80;font-weight:600}
+.steps{text-align:left;margin:26px auto 0;color:var(--muted);font-size:.85rem;line-height:1.9;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 22px}
+.steps b{color:var(--text)}
+.privacy{margin-top:18px;font-size:.78rem;color:#4ade80}
+#fileStatus{margin-top:14px;font-size:.85rem;color:var(--muted);min-height:1.2em}
+#err{color:#f87171;margin-top:10px;font-size:.85rem}
+#reset{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-size:.78rem;cursor:pointer;margin-bottom:16px}
+#reset:hover{color:var(--text);border-color:#3b4359}
+.hide{display:none !important}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;flex-wrap:wrap;gap:12px}
+.logo{font-weight:700;font-size:1.15rem}
+.logo span{color:#4ade80}
+.tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:5px}
+.tab{border:none;background:none;color:var(--muted);font-size:.88rem;font-weight:600;padding:8px 20px;border-radius:9px;cursor:pointer}
+.tab:hover{color:var(--text)}
+.tab.active{background:#232a3b;color:var(--text)}
+.tab .soon{font-size:.62rem;color:#fbbf24;margin-left:5px;vertical-align:middle}
+#cbPaste{width:100%;min-height:180px;background:#11141c;border:1px solid var(--border);border-radius:10px;color:var(--text);padding:14px;font-family:ui-monospace,monospace;font-size:.75rem;resize:vertical}
+#cbPaste:focus{outline:none;border-color:#60a5fa}
+.btn{background:#4ade80;color:#0e1117;font-weight:600;border:none;border-radius:10px;padding:11px 26px;font-size:.92rem;cursor:pointer;margin-top:14px}
+.btn:hover{background:#6ee7a0}
+.venues{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:0 0 18px}
+.vchip{background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:20px;padding:7px 16px;font-size:.82rem;font-weight:600;cursor:pointer}
+.vchip:hover{color:var(--text);border-color:#3b4359}
+.vchip.active{background:#232a3b;color:var(--text);border-color:#60a5fa}
+.maprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:14px 0}
+.maprow label{display:block;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.maprow select{width:100%;background:#11141c;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px}
+.coming{max-width:560px;margin:10vh auto;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:48px 32px}
+.coming h2{margin-bottom:10px}
+.coming p{color:var(--muted);font-size:.92rem}
+/* ---- marketing section (scoped under #mkt) ---- */
+html{scroll-behavior:smooth}
+#analyzer{scroll-margin-top:24px}
+#mkt{max-width:960px;margin:72px auto 0;line-height:1.6;border-top:1px solid var(--border)}
+#mkt .cta{background:#4ade80;color:#0e1117;font-weight:600;padding:10px 22px;border-radius:10px;text-decoration:none;font-size:.9rem;display:inline-block}
+#mkt .cta:hover{background:#6ee7a0}
+#mkt .cta.big{font-size:1.05rem;padding:14px 32px}
+#mkt .hero{text-align:center;padding:60px 0 40px}
+#mkt .hero h1{font-size:2.6rem;line-height:1.2;font-weight:700;max-width:720px;margin:0 auto 18px}
+#mkt .hero h1 em{color:#4ade80;font-style:normal}
+#mkt .hero p{color:var(--muted);font-size:1.15rem;max-width:600px;margin:0 auto 32px}
+#mkt .badge{display:inline-block;background:#1c2130;border:1px solid #2c3550;color:#fbbf24;font-size:.78rem;padding:5px 14px;border-radius:20px;margin-bottom:22px;letter-spacing:.03em}
+#mkt .demo{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin:40px auto;max-width:760px}
+#mkt .demo-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+#mkt .stat{flex:1;min-width:150px;text-align:center;padding:14px;background:#11141c;border-radius:10px}
+#mkt .stat .l{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+#mkt .stat .v{font-size:1.5rem;font-weight:700;margin-top:4px}
+#mkt .demo .caption{text-align:center;color:var(--muted);font-size:.8rem;margin-top:14px}
+#mkt section{padding:48px 0}
+#mkt h2{font-size:1.7rem;margin-bottom:10px;text-align:center;font-weight:700}
+#mkt .msub{color:var(--muted);text-align:center;max-width:560px;margin:0 auto 40px}
+#mkt .cards3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+#mkt .fcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+#mkt .fcard .ico{font-size:1.6rem;margin-bottom:12px}
+#mkt .fcard h3{font-size:1.05rem;margin-bottom:8px}
+#mkt .fcard p{color:var(--muted);font-size:.9rem}
+#mkt .how{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;counter-reset:step}
+#mkt .step{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;position:relative}
+#mkt .step::before{counter-increment:step;content:counter(step);position:absolute;top:-14px;left:20px;background:#4ade80;color:#0e1117;font-weight:700;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem}
+#mkt .step h3{font-size:.98rem;margin:8px 0 6px}
+#mkt .step p{color:var(--muted);font-size:.85rem}
+#mkt .privacy-band{background:#0f1f16;border:1px solid #1e4030;border-radius:14px;padding:28px;text-align:center}
+#mkt .privacy-band h3{color:#4ade80;font-size:1.1rem;margin-bottom:8px}
+#mkt .privacy-band p{color:var(--muted);font-size:.92rem;max-width:640px;margin:0 auto}
+#mkt .final{text-align:center;padding:48px 0 56px}
+#mkt .final h2{margin-bottom:8px}
+#mkt .final p{color:var(--muted);margin-bottom:28px}
+@media(max-width:640px){#mkt .hero h1{font-size:1.9rem}}
+</style>
+</head>
+<body>
+
+<div class="topbar" id="analyzer">
+  <div class="logo">True<span>Ledger</span></div>
+  <a href="#" onclick="openBug();return false" style="color:var(--muted);font-size:.78rem;text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;order:3">🐞 Report a bug</a>
+  <div class="tabs">
+    <button class="tab active" data-tab="kalshi">Kalshi</button>
+    <button class="tab" data-tab="coinbase">Coinbase</button>
+    <button class="tab" data-tab="polymarket">Polymarket</button>
+    <button class="tab" data-tab="other">More venues</button>
+  </div>
+</div>
+
+<div id="tab-kalshi">
+<div id="landing">
+  <h1>Kalshi P&amp;L Analyzer</h1>
+  <div class="tag">See your <b>true</b> profit and loss. Kalshi's export calls gross payout "profit" — this tool computes real P&amp;L from your cost basis, plus fees, win rate, and where your money actually goes.</div>
+  <div class="dropgrid">
+    <div class="drop" id="dropAct">
+      <div class="ico">📄</div>
+      <div class="big">Activity CSV</div>
+      <div class="small">Trades, deposits &amp; credits export</div>
+      <div class="state" id="stateAct">click or drop file</div>
+    </div>
+    <div class="drop" id="dropSett">
+      <div class="ico">🧾</div>
+      <div class="big">Settlements CSV</div>
+      <div class="small">Settlement history export</div>
+      <div class="state" id="stateSett">click or drop file</div>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".csv" multiple style="display:none">
+  <div id="fileStatus"></div>
+  <div id="err"></div>
+  <div class="steps">
+    <b>How to get your exports from Kalshi:</b><br>
+    1. Log in at kalshi.com and open your <b>Activity</b> page<br>
+    2. Download the CSV export of <b>all activity</b> (trades, deposits, credits)<br>
+    3. Download the <b>settlements</b> export too — that's what unlocks true P&amp;L<br>
+    4. Drop each file into its box above &mdash; both are required
+  </div>
+  <div class="privacy">🔒 100% private — everything runs in your browser. Your data never leaves your computer.</div>
+</div>
+
+<div id="dash" class="hide">
+  <button id="reset">← Analyze different files</button>
+  <h1>Your Kalshi Dashboard</h1>
+  <div class="sub" id="daterange"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="note" id="pnlNote"><b>Note:</b> P&amp;L is computed from settlement cost basis (payout minus average cost of contracts held). Kalshi's raw "Profit" column shows gross payout only &mdash; figures here are true net realized P&amp;L. Balance is estimated from deposits + credits + P&amp;L &minus; fees; check Kalshi for the exact figure.</div>
+  <div class="note hide" id="noSettNote"></div>
+  <div class="grid">
+    <div class="card span8 needs-pnl"><h2>Cumulative Realized P&amp;L ($) &mdash; with &amp; without fees</h2><div class="chart-box"><canvas id="cPnl"></canvas></div></div>
+    <div class="card span4 needs-pnl"><h2>P&amp;L by Category ($)</h2><div class="chart-box"><canvas id="cPnlCat"></canvas></div></div>
+    <div class="card span6 needs-pnl"><h2>Top 5 Wins</h2><table><thead><tr><th>Date</th><th>Market</th><th class="num">P&amp;L $</th></tr></thead><tbody id="bestRows"></tbody></table></div>
+    <div class="card span6 needs-pnl"><h2>Top 5 Losses</h2><table><thead><tr><th>Date</th><th>Market</th><th class="num">P&amp;L $</th></tr></thead><tbody id="worstRows"></tbody></table></div>
+    <div class="card span8"><h2>Daily Trading Volume ($)</h2><div class="chart-box"><canvas id="cDaily"></canvas></div></div>
+    <div class="card span4"><h2>Volume by Category</h2><div class="chart-box"><canvas id="cCat"></canvas></div></div>
+    <div class="card span4"><h2>Yes / No &amp; Taker / Maker</h2><div class="chart-box"><canvas id="cDir"></canvas></div></div>
+    <div class="card span4"><h2>Trades by Hour of Day (PT)</h2><div class="chart-box"><canvas id="cHour"></canvas></div></div>
+    <div class="card span4"><h2>Entry Price Distribution (&cent;)</h2><div class="chart-box"><canvas id="cPrice"></canvas></div></div>
+    <div class="card span6"><h2>Cumulative Fees ($)</h2><div class="chart-box"><canvas id="cFees"></canvas></div></div>
+    <div class="card span6"><h2>Deposits ($)</h2><div class="chart-box"><canvas id="cDeps"></canvas></div></div>
+    <div class="card span6"><h2>Top 10 Biggest Bets (single trades)</h2><table><thead><tr><th>Date</th><th>Market</th><th>Dir</th><th class="num">Price &cent;</th><th class="num">Size $</th></tr></thead><tbody id="sizeRows"></tbody></table></div>
+    <div class="card span6"><h2>Top 10 Most-Traded Markets (frequency)</h2><table><thead><tr><th>Market</th><th>Category</th><th class="num">Trades</th><th class="num">Volume $</th></tr></thead><tbody id="freqRows"></tbody></table></div>
+    <div class="card span12"><h2>Top 15 Markets by Volume</h2><table><thead><tr><th>Market</th><th>Category</th><th class="num">Trades</th><th class="num">Volume $</th><th class="num">Fees $</th></tr></thead><tbody id="mktRows"></tbody></table></div>
+  </div>
+</div>
+</div><!-- /tab-kalshi -->
+
+<div id="tab-coinbase" class="hide">
+  <div id="cbLanding" style="max-width:760px;margin:4vh auto">
+    <h1 style="text-align:center">Coinbase Prediction Markets</h1>
+    <div class="steps" style="margin:18px 0 20px">
+      <b>Where to find your transactions:</b><br>
+      1. Open <b>coinbase.com</b> (or the app) and go to <b>Predictions</b><br>
+      2. Open your <b>Activity</b> / transaction history and scroll to the bottom so every entry is loaded<br>
+      3. Select the whole list &mdash; <b>Ctrl+A</b> (Cmd+A on Mac) &mdash; then copy with <b>Ctrl+C</b><br>
+      4. Click in the box below and paste with <b>Ctrl+V</b> &mdash; a preview appears so you can check it looks right<br>
+      5. Hit <b>Analyze</b>
+    </div>
+    <textarea id="cbPaste" placeholder="Paste your Coinbase prediction market history here — e.g.
+
+Bought Over 0.5 1H goals scored
++$499.98
++724.62 yes
+Jul 3, 2026
+..."></textarea>
+    <div id="cbPreview" style="margin-top:12px"></div>
+    <div style="text-align:center"><button class="btn" id="cbGo" disabled style="opacity:.45;cursor:not-allowed">Analyze</button></div>
+    <div id="cbErr" style="color:#f87171;margin-top:10px;font-size:.85rem;text-align:center"></div>
+    <div class="privacy" style="text-align:center">🔒 100% private — parsing happens in your browser only.</div>
+  </div>
+  <div id="cbDash" class="hide">
+    <button class="resetBtn" id="cbReset" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-size:.78rem;cursor:pointer;margin-bottom:16px">← Paste different data</button>
+    <h1>Your Coinbase PM Dashboard</h1>
+    <div class="sub" id="cbRange"></div>
+    <div class="kpis" id="cbKpis"></div>
+    <div class="note"><b>Note:</b> Figures are net cash flow (payouts + sale proceeds &minus; purchase costs). Recently bought, unsettled positions count as losses until they pay out. Per-market totals group by market name.</div>
+    <div class="grid">
+      <div class="card span8"><h2>Monthly Net Cash Flow ($)</h2><div class="chart-box"><canvas id="cbMon"></canvas></div></div>
+      <div class="card span4"><h2>Cash Flows ($)</h2><div class="chart-box"><canvas id="cbFlow"></canvas></div></div>
+      <div class="card span6"><h2>Top 5 Markets Won</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="cbBest"></tbody></table></div>
+      <div class="card span6"><h2>Top 5 Markets Lost</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="cbWorst"></tbody></table></div>
+    </div>
+  </div>
+</div><!-- /tab-coinbase -->
+
+<div id="tab-polymarket" class="hide">
+  <div id="pmLanding" style="max-width:640px;margin:4vh auto">
+    <h1 style="text-align:center">Polymarket</h1>
+    <div class="sub" style="text-align:center;margin:10px 0 22px">Polymarket trades are on-chain, so no export is needed &mdash; just your wallet address.</div>
+    <div class="steps" style="margin-bottom:18px">
+      <b>Where to find your address:</b><br>
+      1. On polymarket.com, click your profile picture &rarr; your profile<br>
+      2. Copy the address that starts with <b>0x</b> (or just copy your profile page URL)<br>
+      3. Paste it below &mdash; your history is fetched read-only from Polymarket's public API
+    </div>
+    <input id="pmAddr" placeholder="0x… wallet address or profile URL" style="width:100%;background:#11141c;border:1px solid var(--border);border-radius:10px;color:var(--text);padding:14px;font-size:.9rem">
+    <div style="text-align:center"><button class="btn" id="pmGo">Load my history</button></div>
+    <div id="pmStatus" style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:12px;min-height:1.2em"></div>
+    <div id="pmErr" style="color:#f87171;margin-top:6px;font-size:.85rem;text-align:center"></div>
+    <div class="privacy" style="text-align:center">🔒 Read-only public data — no keys, no signatures, nothing to connect.</div>
+  </div>
+  <div id="pmDash" class="hide">
+    <button id="pmReset" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-size:.78rem;cursor:pointer;margin-bottom:16px">← Different address</button>
+    <h1>Your Polymarket Dashboard</h1>
+    <div class="sub" id="pmRange"></div>
+    <div class="kpis" id="pmKpis"></div>
+    <div class="note"><b>Note:</b> Figures are net USDC cash flow (sales + redemptions + rewards &minus; purchases). Open positions count as spent until they resolve, so recent buys read as losses until settlement.</div>
+    <div class="grid">
+      <div class="card span8"><h2>Monthly Net Cash Flow ($)</h2><div class="chart-box"><canvas id="pmMon"></canvas></div></div>
+      <div class="card span4"><h2>Cash Flows ($)</h2><div class="chart-box"><canvas id="pmFlow"></canvas></div></div>
+      <div class="card span6"><h2>Top 5 Markets Won</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="pmBest"></tbody></table></div>
+      <div class="card span6"><h2>Top 5 Markets Lost</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="pmWorst"></tbody></table></div>
+    </div>
+  </div>
+</div><!-- /tab-polymarket -->
+
+<div id="tab-other" class="hide">
+  <div id="gLanding" style="max-width:760px;margin:3vh auto">
+    <h1 style="text-align:center">More Venues</h1>
+    <div class="sub" style="text-align:center;margin:10px 0 20px">Universal analyzer &mdash; works with any venue that gives you a transaction CSV. Pick your platform for export instructions, then upload.</div>
+    <div class="venues" id="venueChips"></div>
+    <div class="steps" id="venueHelp" style="margin-bottom:16px"></div>
+    <div class="drop" id="gDrop" style="text-align:center">
+      <div class="ico">📄</div>
+      <div class="big">Drop your transactions CSV</div>
+      <div class="state" id="gState">click or drop file</div>
+    </div>
+    <input type="file" id="gFile" accept=".csv" style="display:none">
+    <div id="gMapper" class="hide">
+      <div class="note" style="margin-top:16px"><b>Map your columns:</b> tell us which column is which, and whether money you spent shows as negative.</div>
+      <div class="maprow">
+        <div><label>Date column</label><select id="mapDate"></select></div>
+        <div><label>Market / description column</label><select id="mapMarket"></select></div>
+        <div><label>Amount column</label><select id="mapAmt"></select></div>
+        <div><label>Money spent appears as</label><select id="mapSign"><option value="neg">Negative numbers</option><option value="pos">Positive numbers</option></select></div>
+      </div>
+      <div id="gPreview"></div>
+      <div style="text-align:center"><button class="btn" id="gGo">Analyze</button></div>
+      <div id="gErr" style="color:#f87171;margin-top:10px;font-size:.85rem;text-align:center"></div>
+    </div>
+    <div class="privacy" style="text-align:center">🔒 100% private — parsing happens in your browser only.</div>
+  </div>
+  <div id="gDash" class="hide">
+    <button id="gReset" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-size:.78rem;cursor:pointer;margin-bottom:16px">← Different file</button>
+    <h1 id="gTitle">Your Dashboard</h1>
+    <div class="sub" id="gRange"></div>
+    <div class="kpis" id="gKpis"></div>
+    <div class="note"><b>Note:</b> Figures are net cash flow from the amount column you mapped. Open positions count as spent until they settle.</div>
+    <div class="grid">
+      <div class="card span8"><h2>Monthly Net Cash Flow ($)</h2><div class="chart-box"><canvas id="gMon"></canvas></div></div>
+      <div class="card span4"><h2>Cash In vs Out ($)</h2><div class="chart-box"><canvas id="gFlow"></canvas></div></div>
+      <div class="card span6"><h2>Top 5 Markets Won</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="gBest"></tbody></table></div>
+      <div class="card span6"><h2>Top 5 Markets Lost</h2><table><thead><tr><th>Market</th><th class="num">Net $</th></tr></thead><tbody id="gWorst"></tbody></table></div>
+    </div>
+  </div>
+</div><!-- /tab-other -->
+
+<div id="mkt">
+<div class="hero">
+  <div class="badge">FOR KALSHI &amp; PREDICTION MARKET TRADERS</div>
+  <h1>Your exchange says you made money.<br><em>Did you really?</em></h1>
+  <p>Kalshi's export labels gross payout as "profit" — it can overstate your results by thousands. TrueLedger computes your real P&amp;L from cost basis, fees included, in seconds.</p>
+  <a class="cta big" href="#analyzer">Get my true P&amp;L — free</a>
+</div>
+
+<div class="demo">
+  <div class="demo-row">
+    <div class="stat"><div class="l">What the export says</div><div class="v" style="color:#4ade80">+$25,683</div></div>
+    <div style="font-size:1.6rem;color:var(--muted)">→</div>
+    <div class="stat"><div class="l">True P&amp;L (cost basis)</div><div class="v" style="color:#f87171">−$2,800</div></div>
+    <div class="stat"><div class="l">After all fees</div><div class="v" style="color:#f87171">−$3,715</div></div>
+  </div>
+  <div class="caption">Real example from an actual Kalshi account export. The "Profit" column isn't profit.</div>
+</div>
+
+<section>
+  <h2>Everything your exchange won't show you</h2>
+  <p class="msub">One page. Drop in your export, get the full picture.</p>
+  <div class="cards3">
+    <div class="fcard"><div class="ico">📉</div><h3>True realized P&amp;L</h3><p>Payout minus what you actually paid for your contracts — the number your exchange buries. Before and after fees, charted over time.</p></div>
+    <div class="fcard"><div class="ico">🎯</div><h3>Win rate &amp; risk profile</h3><p>Win/loss record, average win vs. average loss, entry price distribution, and Yes/No bias. See if you're winning often but losing big.</p></div>
+    <div class="fcard"><div class="ico">🏷️</div><h3>P&amp;L by category</h3><p>Tennis, crypto, sports, politics — find out which markets make you money and which quietly drain your account.</p></div>
+    <div class="fcard"><div class="ico">💸</div><h3>The fee meter</h3><p>Trading and deposit fees accumulate silently. Watch the cumulative drag on your returns — it's usually bigger than you think.</p></div>
+    <div class="fcard"><div class="ico">🕐</div><h3>When you trade</h3><p>Trades by hour of day. Late-night volume spikes are a pattern worth knowing about.</p></div>
+    <div class="fcard"><div class="ico">📊</div><h3>Readable market names</h3><p>No more KXATPMATCH-26MAR22QUILEH. Every market decoded into plain English automatically.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <p class="msub">No account. No signup. No data upload.</p>
+  <div class="how">
+    <div class="step"><h3>Export from Kalshi</h3><p>Download your activity and settlements CSVs from your Kalshi account page.</p></div>
+    <div class="step"><h3>Drop them in</h3><p>Drag both files onto the analyzer above. Parsing happens instantly, entirely in your browser.</p></div>
+    <div class="step"><h3>See the truth</h3><p>Full dashboard: true P&amp;L, win rate, fees, categories, biggest bets, and an estimated balance.</p></div>
+  </div>
+</section>
+
+<section style="padding-bottom:0">
+  <div class="privacy-band">
+    <h3>🔒 Your data never leaves your computer</h3>
+    <p>TrueLedger is a single page that runs 100% in your browser. Nothing is uploaded, stored, or tracked. Close the tab and it's gone. That's not a promise buried in a privacy policy — there's simply no server to send anything to.</p>
+  </div>
+</section>
+
+<div class="final">
+  <h2>Most traders don't know their real number.</h2>
+  <p>Takes under a minute to find out yours.</p>
+  <a class="cta big" href="#analyzer">Analyze my trades — free</a>
+</div>
+</div><!-- /mkt -->
+
+<script>
+// ===== Kalshi P&L Analyzer — pure logic (testable in node) =====
+const MONTHS = {JAN:'Jan',FEB:'Feb',MAR:'Mar',APR:'Apr',MAY:'May',JUN:'Jun',JUL:'Jul',AUG:'Aug',SEP:'Sep',OCT:'Oct',NOV:'Nov',DEC:'Dec'};
+const SERIES = {
+ KXWTAMATCH:'WTA Tennis',KXATPMATCH:'ATP Tennis',KXATPCHALLENGERMATCH:'ATP Challenger',KXATPSETWINNER:'ATP Set Winner',
+ KXNBAGAME:'NBA Game',KXNBATOTAL:'NBA Total Pts',KXNBASPREAD:'NBA Spread',KXNBAMENTION:'NBA Broadcast Mention',KXNBAPTS:'NBA Player Pts',KXNBA2D:'NBA Player Prop',
+ KXNCAAMBGAME:'NCAA Game',KXNCAAMBSPREAD:'NCAA Spread',KXNCAAMBTOTAL:'NCAA Total',KXNBLGAME:'NBL Game (Aus)',
+ KXNHLGAME:'NHL Game',KXMLBGAME:'MLB Game',KXEPLGAME:'EPL Game',KXALEAGUEGAME:'A-League Game',
+ KXUFCFIGHT:'UFC Fight',KXUFCMOF:'UFC Method of Finish',KXUFCMOV:'UFC Method of Victory',KXFIGHTMENTION:'UFC Broadcast Mention',
+ KXWC1HTOTAL:'World Cup 1H Total',KXWC1HSCORE:'World Cup 1H Score',KXWCTOTAL:'World Cup Total Goals',KXWCTEAMTOTAL:'World Cup Team Goals',KXWCADVANCE:'World Cup Advance',KXWCMENTION:'World Cup Broadcast Mention',
+ KXCS2GAME:'CS2 Esports Match',
+ KXBTC15M:'BTC 15-min Price',KXBTCD:'BTC Daily Price',KXETH15M:'ETH 15-min Price',KXETHD:'ETH Daily Price',KXSOL15M:'SOL 15-min Price',KXSOLD:'SOL Daily Price',
+ KXWTI:'WTI Oil Price',KXHORMUZTRAFFICW:'Hormuz Ship Traffic',KXGOVTSHUTLENGTH:'Govt Shutdown Length',KXUSAIRANAGREEMENT:'US-Iran Agreement',KXLEAVESTARMER:'Starmer Departure',KXDEMSENATEPRIMARYCOMBO:'Dem Senate Primary',
+ KXLATENIGHTMENTION:'Late Night Show Mention',KXMENTIONEARNFDX:'FedEx Earnings Call Mention',KXMENTION:'Speech Mention',KXPERSONMENTION:'Person Mention',KXPRESMENTION:'Trump Speech Mention',KXTRUMPMENTION:'Trump Mention',KXTRUMPSAY:'Trump Says',KXBERNIEMENTION:'Bernie Speech Mention',KXJENSENMENTION:'Jensen Huang Mention',
+ KXMVESPORTSMULTIGAMEEXTENDED:'Esports Multi-Game Parlay',KXMVECROSSCATEGORY:'Cross-Category Parlay',
+ KXFOWOMEN:'French Open Women',KXMOWOMEN:'Madrid Open Women',
+};
+function num(x){ return x ? (parseFloat(String(x).replace(/,/g,'')) || 0) : 0; }
+function prefixOf(t){ const m = /^([A-Z0-9]+)/.exec((t||'').split('-')[0]); return m ? m[1] : ''; }
+function category(t){
+  const p = prefixOf(t);
+  if (/^KX(WTAMATCH|ATPCHALLENGERMATCH|ATPMATCH|ATPSETWINNER|FOWOMEN|MOWOMEN)/.test(p)) return 'Tennis';
+  if (p.includes('MENTION')) return 'Mentions';
+  if (/^KXN(BA|CAAM)/.test(p)) return 'Basketball';
+  if (p.startsWith('KXNHL')) return 'Hockey';
+  if (p.startsWith('KXUFC')) return 'UFC';
+  if (/^KX(BTC|ETH|SOL)/.test(p)) return 'Crypto';
+  if (p.startsWith('KXMVE') || p.startsWith('KXCS')) return 'Esports';
+  if (p.startsWith('KXWC') || p==='KXALEAGUEGAME' || p==='KXEPLGAME') return 'Soccer';
+  if (['KXWTI','KXHORMUZTRAFFICW','KXGOVTSHUTLENGTH','KXTRUMPSAY','KXUSAIRANAGREEMENT','KXLEAVESTARMER','KXDEMSENATEPRIMARYCOMBO'].includes(p)) return 'Politics/World';
+  return 'Other';
+}
+function humanize(ticker){
+  if (!ticker) return 'Unknown';
+  const parts = ticker.split('-');
+  const prefix = prefixOf(ticker);
+  let series = SERIES[prefix];
+  if (!series){ const p2 = (/^([A-Z]+)/.exec(prefix)||[])[1]||prefix; series = SERIES[p2] || p2.replace(/^KX/,''); }
+  if (prefix==='KXMVESPORTSMULTIGAMEEXTENDED' || prefix==='KXMVECROSSCATEGORY') return series;
+  const rest = parts[1]||'', outcome = parts.slice(2).join('-');
+  let label = series, tail = rest;
+  const dm = /^(\d{2})([A-Z]{3})(\d{2})(.*)$/.exec(rest);
+  if (dm && MONTHS[dm[2]]){ label += ` · ${MONTHS[dm[2]]} ${parseInt(dm[3])}`; tail = dm[4]; }
+  const tm = /^(\d{4})?([A-Z0-9]*)$/.exec(tail);
+  if (tm){
+    if (tm[1]) label += ` ${tm[1].slice(0,2)}:${tm[1].slice(2)}`;
+    const teams = tm[2];
+    if (teams && /^[A-Z]{6}$/.test(teams)) label += ` · ${teams.slice(0,3)} vs ${teams.slice(3)}`;
+    else if (teams) label += ` · ${teams}`;
+  }
+  const pm = /^T([\d.]+)$/.exec(outcome);
+  if (pm){ const v = parseFloat(pm[1]); label += ' · above $' + (v>=1000 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2)); }
+  else if (outcome) label += ` · ${outcome}`;
+  return label;
+}
+function computeAll(actRows, settRows){
+  const trades = actRows.filter(r=>r.type==='Trade');
+  const deposits = actRows.filter(r=>r.type==='Deposit');
+  const credits = actRows.filter(r=>r.type==='Credit');
+  if (!trades.length) return null;
+  const trec = trades.map(r=>({date:(r.Original_Date||'').slice(0,10), hour:parseInt((r.Original_Date||'').slice(11,13))||0,
+    amt:num(r.Amount_In_Dollars), fee:num(r.Fee_In_Dollars), ticker:r.Market_Ticker||'', cat:category(r.Market_Ticker),
+    dir:r.Direction, ot:r.Order_Type, price:num(r.Price_In_Cents)}));
+  const daily = {};
+  trec.forEach(t=>{ const d = daily[t.date] = daily[t.date]||{vol:0,fees:0,n:0}; d.vol+=t.amt; d.fees+=t.fee; d.n++; });
+  const dailyList = Object.keys(daily).sort().map(k=>({date:k, vol:+daily[k].vol.toFixed(2), fees:+daily[k].fees.toFixed(2), n:daily[k].n}));
+  const cats = {};
+  trec.forEach(t=>{ const c = cats[t.cat] = cats[t.cat]||{vol:0,fees:0,n:0}; c.vol+=t.amt; c.fees+=t.fee; c.n++; });
+  const catList = Object.keys(cats).map(k=>({cat:k, vol:+cats[k].vol.toFixed(2), fees:+cats[k].fees.toFixed(2), n:cats[k].n})).sort((a,b)=>b.vol-a.vol);
+  const hours = Array.from({length:24},(_,h)=>({h, n:0}));
+  trec.forEach(t=>{ hours[(t.hour-7+24)%24].n++; });
+  const deps = deposits.map(r=>({date:(r.Original_Date||'').slice(0,10), amt:num(r.Amount_In_Dollars), fee:num(r.Fee_In_Dollars)})).sort((a,b)=>a.date<b.date?-1:1);
+  const prices = Array.from({length:10},(_,b)=>({b:`${b*10}-${b*10+9}¢`, n:0}));
+  trec.forEach(t=>{ if(t.price>0) prices[Math.min(Math.floor(t.price/10),9)].n++; });
+  const mkts = {};
+  trec.forEach(t=>{ const m = mkts[t.ticker] = mkts[t.ticker]||{vol:0,fees:0,n:0,cat:t.cat}; m.vol+=t.amt; m.fees+=t.fee; m.n++; });
+  const topMkts = Object.keys(mkts).map(k=>({ticker:k, name:humanize(k), vol:+mkts[k].vol.toFixed(2), fees:+mkts[k].fees.toFixed(2), n:mkts[k].n, cat:mkts[k].cat})).sort((a,b)=>b.vol-a.vol).slice(0,15);
+  const topSize = trec.slice().sort((a,b)=>b.amt-a.amt).slice(0,10).map(t=>({date:t.date, ticker:t.ticker, name:humanize(t.ticker), cat:t.cat, dir:t.dir, price:t.price, amt:+t.amt.toFixed(2)}));
+  const topFreq = Object.keys(mkts).map(k=>({ticker:k, name:humanize(k), n:mkts[k].n, vol:+mkts[k].vol.toFixed(2), cat:mkts[k].cat})).sort((a,b)=>b.n-a.n).slice(0,10);
+  const priced = trec.filter(t=>t.price>0);
+  const summary = {
+    n_trades: trades.length, volume: +trec.reduce((a,t)=>a+t.amt,0).toFixed(2),
+    trade_fees: +trec.reduce((a,t)=>a+t.fee,0).toFixed(2),
+    deposits_total: +deps.reduce((a,d)=>a+d.amt,0).toFixed(2),
+    deposit_fees: +deps.reduce((a,d)=>a+d.fee,0).toFixed(2),
+    n_deposits: deps.length, credits_total: +credits.reduce((a,r)=>a+num(r.Amount_In_Dollars),0).toFixed(2),
+    yes: trec.filter(t=>t.dir==='Yes').length, no: trec.filter(t=>t.dir==='No').length,
+    taker: trec.filter(t=>t.ot==='Taker').length, maker: trec.filter(t=>t.ot==='Maker').length,
+    avg_trade: +(trec.reduce((a,t)=>a+t.amt,0)/trec.length).toFixed(2),
+    first_date: dailyList[0].date, last_date: dailyList[dailyList.length-1].date, n_days_active: dailyList.length,
+    avg_price: priced.length ? +(priced.reduce((a,t)=>a+t.price,0)/priced.length).toFixed(1) : 0,
+  };
+  const D = {summary, daily:dailyList, cats:catList, hours, deps, prices, top_mkts:topMkts, top_size:topSize, top_freq:topFreq, pnl:null, balance:null};
+  // ---- settlements ----
+  const setts = (settRows||[]).filter(r=>r.type==='Settlement');
+  if (setts.length){
+    const srec = setts.map(r=>{
+      const noOwn=num(r.No_Contracts_Owned), noAvg=num(r.No_Contracts_Average_Price_In_Cents);
+      const yesOwn=num(r.Yes_Contracts_Owned), yesAvg=num(r.Yes_Contracts_Average_Price_In_Cents);
+      const res=r.Result, winOwn = res==='yes'?yesOwn:noOwn, loseOwn = res==='yes'?noOwn:yesOwn;
+      const payout = Math.min(yesOwn,noOwn) + Math.max(winOwn-loseOwn,0);
+      const cost = noOwn*noAvg/100 + yesOwn*yesAvg/100;
+      return {date:(r.Original_Date||'').slice(0,10), ticker:r.Market_Ticker||'', name:humanize(r.Market_Ticker), cat:category(r.Market_Ticker),
+        res, payout:+payout.toFixed(2), cost:+cost.toFixed(2), pnl:+(payout-cost).toFixed(2)};
+    }).sort((a,b)=>a.date<b.date?-1:1);
+    const wins = srec.filter(s=>s.pnl>0.005), losses = srec.filter(s=>s.pnl<-0.005);
+    const pd = {}; srec.forEach(s=>{ pd[s.date]=(pd[s.date]||0)+s.pnl; });
+    const pnlDaily = Object.keys(pd).sort().map(k=>({date:k, pnl:+pd[k].toFixed(2)}));
+    const pc = {}; srec.forEach(s=>{ const c = pc[s.cat]=pc[s.cat]||{pnl:0,n:0,w:0}; c.pnl+=s.pnl; c.n++; if(s.pnl>0.005)c.w++; });
+    const pnlCat = Object.keys(pc).map(k=>({cat:k, pnl:+pc[k].pnl.toFixed(2), n:pc[k].n, w:pc[k].w})).sort((a,b)=>a.pnl-b.pnl);
+    const feeByDate = {};
+    dailyList.forEach(d=>{ feeByDate[d.date]=(feeByDate[d.date]||0)+d.fees; });
+    deps.forEach(d=>{ feeByDate[d.date]=(feeByDate[d.date]||0)+d.fee; });
+    const allDates = [...new Set([...Object.keys(feeByDate), ...pnlDaily.map(x=>x.date)])].sort();
+    const pnlByDate = {}; pnlDaily.forEach(x=>{ pnlByDate[x.date]=x.pnl; });
+    const daily2 = allDates.map(dt=>({date:dt, pnl:pnlByDate[dt]||0, fee:+(feeByDate[dt]||0).toFixed(2)}));
+    const net = +srec.reduce((a,s)=>a+s.pnl,0).toFixed(2);
+    D.pnl = {net, n_settlements:srec.length, wins:wins.length, losses:losses.length,
+      win_rate: +(100*wins.length/Math.max(wins.length+losses.length,1)).toFixed(1),
+      avg_win: wins.length ? +(wins.reduce((a,s)=>a+s.pnl,0)/wins.length).toFixed(2) : 0,
+      avg_loss: losses.length ? +(losses.reduce((a,s)=>a+s.pnl,0)/losses.length).toFixed(2) : 0,
+      gross_won: +wins.reduce((a,s)=>a+s.pnl,0).toFixed(2), gross_lost: +losses.reduce((a,s)=>a+s.pnl,0).toFixed(2),
+      daily: pnlDaily, cat: pnlCat, daily2,
+      best: srec.slice().sort((a,b)=>b.pnl-a.pnl).slice(0,5), worst: srec.slice().sort((a,b)=>a.pnl-b.pnl).slice(0,5),
+      net_after_fees: +(net - summary.trade_fees - summary.deposit_fees).toFixed(2)};
+    const settled = new Set(setts.map(r=>r.Market_Ticker));
+    const openCost = trec.filter(t=>!settled.has(t.ticker)).reduce((a,t)=>a+t.amt,0);
+    const openN = new Set(trec.filter(t=>!settled.has(t.ticker)).map(t=>t.ticker)).size;
+    D.balance = {est:+(summary.deposits_total - summary.deposit_fees + summary.credits_total + net - summary.trade_fees).toFixed(2),
+      open_cost:+openCost.toFixed(2), open_n:openN};
+  }
+  return D;
+}
+
+
+
+// ===== UI wiring =====
+const $ = id => document.getElementById(id);
+let fileBucket = {act:null, sett:null};
+const BUG_LINK = ' <a href="#" onclick="openBug();return false" style="color:#60a5fa">If this looks like a bug, report it</a> and we\'ll fix it.';
+const showErr = (id, msg) => { $(id).innerHTML = msg ? msg + ' —' + BUG_LINK : ''; };
+let liveCharts = [];
+
+function classify(rows){
+  if (!rows.length) return 'unknown';
+  const types = new Set(rows.map(r=>r.type));
+  if (types.has('Settlement')) return 'sett';
+  if (types.has('Trade') || types.has('Order') || types.has('Deposit')) return 'act';
+  return 'unknown';
+}
+function markZone(kind, fname){
+  const zone = kind==='act' ? 'dropAct' : 'dropSett';
+  const state = kind==='act' ? 'stateAct' : 'stateSett';
+  $(zone).classList.add('loaded');
+  $(state).textContent = '✓ ' + fname;
+}
+function handleFiles(files){
+  $('err').textContent = '';
+  [...files].forEach(f=>{
+    Papa.parse(f, {header:true, skipEmptyLines:true, transformHeader:h=>h.replace(/^﻿/,''), complete: res=>{
+      const kind = classify(res.data);
+      if (kind==='sett'){ fileBucket.sett = res.data; markZone('sett', f.name); }
+      else if (kind==='act'){ fileBucket.act = res.data; markZone('act', f.name); }
+      else { showErr('err', `"${f.name}" doesn't look like a Kalshi export (no type column with Trade/Settlement rows)`); return; }
+      tryRender();
+    }});
+  });
+}
+function tryRender(){
+  const missing = [];
+  if (!fileBucket.act) missing.push('activity');
+  if (!fileBucket.sett) missing.push('settlements');
+  if (missing.length){ $('fileStatus').textContent = 'Waiting for your ' + missing.join(' and ') + ' file' + (missing.length>1?'s':'') + '…'; return; }
+  let D;
+  try { D = computeAll(fileBucket.act, fileBucket.sett); }
+  catch(e){ showErr('err', 'Could not parse: ' + e.message); return; }
+  if (!D){ showErr('err', 'No trades found in the activity file — is it the right export?'); return; }
+  render(D);
+}
+['dropAct','dropSett'].forEach(id=>{
+  const el = $(id);
+  el.addEventListener('click', ()=>$('fileInput').click());
+  ['dragover','dragenter'].forEach(ev=>el.addEventListener(ev, e=>{e.preventDefault(); el.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>el.addEventListener(ev, e=>{e.preventDefault(); el.classList.remove('over');}));
+  el.addEventListener('drop', e=>handleFiles(e.dataTransfer.files));
+});
+$('fileInput').addEventListener('change', e=>{ handleFiles(e.target.files); e.target.value=''; });
+$('reset').addEventListener('click', ()=>{ fileBucket={act:null,sett:null}; $('fileStatus').textContent=''; $('fileInput').value='';
+  ['dropAct','dropSett'].forEach(id=>$(id).classList.remove('loaded'));
+  $('stateAct').textContent = $('stateSett').textContent = 'click or drop file';
+  liveCharts.forEach(c=>c.destroy()); liveCharts=[]; $('dash').classList.add('hide'); $('landing').classList.remove('hide'); });
+
+// ===== rendering =====
+const fmt$ = n => '$' + n.toLocaleString('en-US',{maximumFractionDigits:0});
+const fmt$2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const mkChart = (id,cfg) => liveCharts.push(new Chart($(id), cfg));
+
+function render(D){
+  if (typeof Chart === 'undefined'){ $('err').textContent = 'Chart library failed to load — check your internet connection and refresh.'; return; }
+  $('landing').classList.add('hide'); $('dash').classList.remove('hide');
+  liveCharts.forEach(c=>c.destroy()); liveCharts=[];
+  const S = D.summary, P = D.pnl, B = D.balance;
+  const hasPnl = !!P;
+  document.querySelectorAll('.needs-pnl').forEach(el=>el.classList.toggle('hide', !hasPnl));
+  $('pnlNote').classList.toggle('hide', !hasPnl);
+  $('noSettNote').classList.toggle('hide', hasPnl);
+  $('daterange').textContent = `Activity from ${S.first_date} to ${S.last_date} · ${S.n_days_active} active trading days`;
+
+  Chart.defaults.color = '#8b93a7'; Chart.defaults.borderColor = '#262b38';
+  const grid = {color:'#20263380'}, noLegend = {legend:{display:false}};
+  const kpis = [];
+  if (hasPnl){
+    const pnlColor = P.net >= 0 ? '#4ade80' : '#f87171';
+    kpis.push(['Est. Current Balance', `<span style="color:${B.est>=0?'#4ade80':'#f87171'}">${fmt$2(B.est)}</span>`, 'incl. ~'+fmt$2(B.open_cost)+' in '+B.open_n+' open positions (at cost)']);
+    kpis.push(['Realized P&L (before fees)', `<span style="color:${pnlColor}">${P.net<0?'−':''}${fmt$2(Math.abs(P.net))}</span>`, P.n_settlements+' settlements']);
+    kpis.push(['Realized P&L (after fees)', `<span style="color:${P.net_after_fees>=0?'#4ade80':'#f87171'}">${P.net_after_fees<0?'−':''}${fmt$2(Math.abs(P.net_after_fees))}</span>`, 'incl. '+fmt$2(S.trade_fees)+' trading + '+fmt$2(S.deposit_fees)+' deposit fees']);
+    kpis.push(['Win Rate', P.win_rate+'%', P.wins+'W / '+P.losses+'L']);
+    kpis.push(['Avg Win / Loss', fmt$2(P.avg_win)+' / '+fmt$2(Math.abs(P.avg_loss)), fmt$2(P.gross_won)+' won, '+fmt$2(Math.abs(P.gross_lost))+' lost']);
+  }
+  kpis.push(['Total Deposited', fmt$2(S.deposits_total), S.n_deposits+' deposits']);
+  kpis.push(['Trading Volume', fmt$(S.volume), S.n_trades+' trades']);
+  kpis.push(['Total Fees', fmt$2(S.trade_fees+S.deposit_fees), fmt$2(S.trade_fees)+' trading + '+fmt$2(S.deposit_fees)+' deposit']);
+  kpis.push(['Avg Trade Size', fmt$2(S.avg_trade), 'avg entry '+S.avg_price+'¢']);
+  kpis.push(['Yes vs No', S.yes+' / '+S.no, Math.round(100*S.yes/Math.max(S.yes+S.no,1))+'% Yes · '+Math.round(100*S.taker/Math.max(S.taker+S.maker,1))+'% taker']);
+  $('kpis').innerHTML = kpis.map(k=>`<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="detail">${k[2]}</div></div>`).join('');
+
+  if (hasPnl){
+    const pnlColor = P.net >= 0 ? '#4ade80' : '#f87171';
+    let pc1=0, pc2=0;
+    mkChart('cPnl', {type:'line', data:{labels:P.daily2.map(d=>d.date), datasets:[
+      {label:'Before fees', data:P.daily2.map(d=>{pc1+=d.pnl; return +pc1.toFixed(2)}), borderColor:'#fbbf24', tension:.25, pointRadius:0, borderWidth:2},
+      {label:'After all fees', data:P.daily2.map(d=>{pc2+=d.pnl-d.fee; return +pc2.toFixed(2)}), borderColor:pnlColor, backgroundColor:pnlColor+'22', fill:true, tension:.25, pointRadius:0, borderWidth:2}
+    ]}, options:{maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:10}}}, scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{grid}}}});
+    mkChart('cPnlCat', {type:'bar', data:{labels:P.cat.map(c=>c.cat), datasets:[{data:P.cat.map(c=>c.pnl), backgroundColor:P.cat.map(c=>c.pnl>=0?'#4ade80':'#f87171'), borderRadius:3}]}, options:{indexAxis:'y', maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid}, y:{grid:{display:false},ticks:{font:{size:10}}}}}});
+    const pnlRow = s => `<tr><td style="white-space:nowrap">${s.date}</td><td><span class="ticker" title="${s.ticker}">${s.name}</span></td><td class="num" style="color:${s.pnl>=0?'#4ade80':'#f87171'}">${s.pnl.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`;
+    $('bestRows').innerHTML = P.best.map(pnlRow).join('');
+    $('worstRows').innerHTML = P.worst.map(pnlRow).join('');
+  }
+  mkChart('cDaily', {type:'bar', data:{labels:D.daily.map(d=>d.date), datasets:[{data:D.daily.map(d=>d.vol), backgroundColor:'#60a5fa', borderRadius:3}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false},ticks:{maxRotation:60,autoSkip:true,maxTicksLimit:18}}, y:{grid}}}});
+  mkChart('cCat', {type:'doughnut', data:{labels:D.cats.map(c=>c.cat), datasets:[{data:D.cats.map(c=>c.vol), backgroundColor:['#60a5fa','#4ade80','#f472b6','#fbbf24','#a78bfa','#f87171','#34d399','#fb923c','#38bdf8','#e879f9'], borderWidth:0}]}, options:{maintainAspectRatio:false, plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10}}}}}});
+  mkChart('cDir', {type:'bar', data:{labels:['Direction','Order Type'], datasets:[{label:'Yes / Taker', data:[S.yes,S.taker], backgroundColor:'#4ade80', borderRadius:3},{label:'No / Maker', data:[S.no,S.maker], backgroundColor:'#f87171', borderRadius:3}]}, options:{maintainAspectRatio:false, plugins:{legend:{labels:{boxWidth:10}}}, scales:{x:{grid:{display:false}}, y:{grid}}}});
+  mkChart('cHour', {type:'bar', data:{labels:D.hours.map(h=>h.h), datasets:[{data:D.hours.map(h=>h.n), backgroundColor:'#a78bfa', borderRadius:2}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false},title:{display:true,text:'Hour (PT)'}}, y:{grid}}}});
+  mkChart('cPrice', {type:'bar', data:{labels:D.prices.map(p=>p.b), datasets:[{data:D.prices.map(p=>p.n), backgroundColor:'#fbbf24', borderRadius:2}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false}}, y:{grid}}}});
+  let fcum = 0;
+  mkChart('cFees', {type:'line', data:{labels:D.daily.map(d=>d.date), datasets:[{data:D.daily.map(d=>{fcum+=d.fees; return +fcum.toFixed(2)}), borderColor:'#f472b6', backgroundColor:'#f472b622', fill:true, tension:.3, pointRadius:0}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false},ticks:{maxTicksLimit:10}}, y:{grid}}}});
+  mkChart('cDeps', {type:'bar', data:{labels:D.deps.map(d=>d.date), datasets:[{data:D.deps.map(d=>d.amt), backgroundColor:'#4ade80', borderRadius:3}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false},ticks:{maxRotation:60}}, y:{grid}}}});
+  $('sizeRows').innerHTML = D.top_size.map(t=>`<tr><td style="white-space:nowrap">${t.date}</td><td><span class="ticker" title="${t.ticker}">${t.name}</span></td><td><span class="pill" style="color:${t.dir==='Yes'?'#4ade80':'#f87171'}">${t.dir}</span></td><td class="num">${t.price}</td><td class="num">${t.amt.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`).join('');
+  $('freqRows').innerHTML = D.top_freq.map(m=>`<tr><td><span class="ticker" title="${m.ticker}">${m.name}</span></td><td><span class="pill">${m.cat}</span></td><td class="num">${m.n}</td><td class="num">${m.vol.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`).join('');
+  $('mktRows').innerHTML = D.top_mkts.map(m=>`<tr><td><span class="ticker" title="${m.ticker}">${m.name}</span></td><td><span class="pill">${m.cat}</span></td><td class="num">${m.n}</td><td class="num">${m.vol.toLocaleString('en-US',{minimumFractionDigits:2})}</td><td class="num">${m.fees.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`).join('');
+}
+
+// ===== tabs =====
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
+    ['kalshi','coinbase','polymarket','other'].forEach(k=>$('tab-'+k).classList.toggle('hide', k!==btn.dataset.tab));
+  });
+});
+
+// ===== Coinbase paste parser =====
+const CB_MONTHS = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+function parseCoinbasePaste(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim());
+  const entries = [];
+  const monthHdr = /^(January|February|March|April|May|June|July|August|September|October|November|December|This month)$/;
+  const dateRe = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/;
+  const amtRe = /^([+-])?\$([\d,]+(?:\.\d+)?)$/;
+  const qtyRe = /^([+-])?([\d,]+(?:\.\d+)?)\s+(yes|no|USD)$/;
+  let cur = null;
+  for (const ln of lines){
+    if (!ln || monthHdr.test(ln)) continue;
+    const am = /^(Bought|Sold|Payout|Closed)(?:\s+(.*))?$/.exec(ln);
+    if (am){ cur = {action:am[1], market:(am[2]||'Unknown').trim(), cash:null, qty:null, side:null, date:null}; continue; }
+    if (!cur) continue;
+    if (ln === 'Pending') continue;
+    if (cur.cash === null){ const m = amtRe.exec(ln); if (m){ cur.cash = parseFloat(m[2].replace(/,/g,'')); continue; } }
+    else if (cur.qty === null){ const m = qtyRe.exec(ln); if (m){ cur.qty = parseFloat(m[2].replace(/,/g,'')); cur.side = m[3]; continue; } }
+    const dm = dateRe.exec(ln);
+    if (dm && cur.cash !== null && CB_MONTHS[dm[1]]){
+      cur.date = dm[3] + '-' + CB_MONTHS[dm[1]] + '-' + String(dm[2]).padStart(2,'0');
+      entries.push(cur); cur = null;
+    }
+  }
+  return entries;
+}
+function computeCoinbase(entries){
+  if (!entries.length) return null;
+  const flow = e => e.action==='Payout' || e.action==='Sold' ? e.cash : e.action==='Bought' ? -e.cash : 0;
+  const buys = entries.filter(e=>e.action==='Bought').reduce((a,e)=>a+e.cash,0);
+  const sells = entries.filter(e=>e.action==='Sold').reduce((a,e)=>a+e.cash,0);
+  const pays = entries.filter(e=>e.action==='Payout').reduce((a,e)=>a+e.cash,0);
+  const mon = {}, mkt = {};
+  entries.forEach(e=>{
+    mon[e.date.slice(0,7)] = (mon[e.date.slice(0,7)]||0) + flow(e);
+    mkt[e.market] = (mkt[e.market]||0) + flow(e);
+  });
+  const ranked = Object.keys(mkt).map(k=>({name:k, pnl:+mkt[k].toFixed(2)})).sort((a,b)=>a.pnl-b.pnl);
+  const dates = entries.map(e=>e.date).sort();
+  return {net:+(pays+sells-buys).toFixed(2), buys:+buys.toFixed(2), sells:+sells.toFixed(2), pays:+pays.toFixed(2),
+    n:entries.length, first:dates[0], last:dates[dates.length-1],
+    monthly:Object.keys(mon).sort().map(m=>({m, pnl:+mon[m].toFixed(2)})),
+    worst:ranked.slice(0,5), best:ranked.slice(-5).reverse()};
+}
+let cbCharts = [];
+function renderCoinbase(C){
+  $('cbLanding').classList.add('hide'); $('cbDash').classList.remove('hide');
+  cbCharts.forEach(c=>c.destroy()); cbCharts = [];
+  $('cbRange').textContent = `${C.n} entries · ${C.first} to ${C.last}`;
+  const col = C.net >= 0 ? '#4ade80' : '#f87171';
+  $('cbKpis').innerHTML = [
+    ['Net Cash Flow', `<span style="color:${col}">${C.net<0?'−':''}${fmt$2(Math.abs(C.net))}</span>`, 'payouts + sales − purchases'],
+    ['Total Purchased', fmt$2(C.buys), 'cost of all contracts bought'],
+    ['Total Payouts', fmt$2(C.pays), 'from settled winning markets'],
+    ['Sale Proceeds', fmt$2(C.sells), 'from positions sold early'],
+  ].map(k=>`<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="detail">${k[2]}</div></div>`).join('');
+  const grid = {color:'#20263380'}, noLegend = {legend:{display:false}};
+  cbCharts.push(new Chart($('cbMon'), {type:'bar', data:{labels:C.monthly.map(x=>x.m), datasets:[{data:C.monthly.map(x=>x.pnl), backgroundColor:C.monthly.map(x=>x.pnl>=0?'#4ade80':'#f87171'), borderRadius:4}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false}}, y:{grid}}}}));
+  cbCharts.push(new Chart($('cbFlow'), {type:'bar', data:{labels:['Bought','Payouts','Sold'], datasets:[{data:[C.buys,C.pays,C.sells], backgroundColor:['#f87171','#4ade80','#60a5fa'], borderRadius:4}]}, options:{indexAxis:'y', maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid}, y:{grid:{display:false}}}}}));
+  const row = x=>`<tr><td>${x.name}</td><td class="num" style="color:${x.pnl>=0?'#4ade80':'#f87171'}">${x.pnl.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`;
+  $('cbBest').innerHTML = C.best.map(row).join('');
+  $('cbWorst').innerHTML = C.worst.map(row).join('');
+}
+let cbEntries = [];
+function cbPreview(){
+  const txt = $('cbPaste').value;
+  cbEntries = txt.trim() ? parseCoinbasePaste(txt) : [];
+  const go = $('cbGo');
+  if (!cbEntries.length){
+    $('cbPreview').innerHTML = txt.trim() ? '<div style="color:#f87171;font-size:.85rem">No entries recognized yet — make sure each entry includes its name, dollar amount, and date.</div>' : '';
+    go.disabled = true; go.style.opacity=.45; go.style.cursor='not-allowed'; return;
+  }
+  const dates = cbEntries.map(e=>e.date).sort();
+  const rows = cbEntries.slice(0,5).map(e=>`<tr><td>${e.date}</td><td>${e.action}</td><td><span class="ticker" style="max-width:220px">${e.market}</span></td><td class="num">$${e.cash.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`).join('');
+  $('cbPreview').innerHTML = `<div style="color:#4ade80;font-size:.88rem;font-weight:600;margin-bottom:8px">✓ Recognized ${cbEntries.length.toLocaleString()} entries · ${dates[0]} to ${dates[dates.length-1]}</div>
+    <div class="card" style="padding:10px"><table><thead><tr><th>Date</th><th>Action</th><th>Market</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="color:var(--muted);font-size:.72rem;margin-top:6px">Showing first 5 of ${cbEntries.length.toLocaleString()} — if this looks right, hit Analyze.</div></div>`;
+  go.disabled = false; go.style.opacity=1; go.style.cursor='pointer';
+}
+$('cbPaste').addEventListener('input', cbPreview);
+$('cbGo').addEventListener('click', ()=>{
+  $('cbErr').textContent = '';
+  if (cbEntries.length < 2){ showErr('cbErr', 'Could not find any entries — make sure you copied the full activity list.'); return; }
+  renderCoinbase(computeCoinbase(cbEntries));
+});
+$('cbReset').addEventListener('click', ()=>{ $('cbDash').classList.add('hide'); $('cbLanding').classList.remove('hide'); });
+
+// ===== Polymarket =====
+async function pmFetchAll(addr){
+  const out = [];
+  for (let offset = 0; offset < 20000; offset += 500){
+    $('pmStatus').textContent = `Fetching… ${out.length.toLocaleString()} entries so far`;
+    const r = await fetch(`https://data-api.polymarket.com/activity?user=${addr}&limit=500&offset=${offset}`);
+    if (!r.ok) throw new Error('API returned ' + r.status);
+    const page = await r.json();
+    out.push(...page);
+    if (page.length < 500) break;
+  }
+  return out;
+}
+function computePolymarket(acts){
+  const flow = a => {
+    const v = a.usdcSize || 0;
+    if (a.type === 'TRADE') return a.side === 'BUY' ? -v : v;
+    if (a.type === 'REDEEM' || a.type === 'MERGE' || a.type === 'REWARD') return v;
+    if (a.type === 'SPLIT') return -v;
+    return 0;
+  };
+  const buys = acts.filter(a=>a.type==='TRADE'&&a.side==='BUY').reduce((s,a)=>s+a.usdcSize,0) + acts.filter(a=>a.type==='SPLIT').reduce((s,a)=>s+a.usdcSize,0);
+  const sells = acts.filter(a=>a.type==='TRADE'&&a.side==='SELL').reduce((s,a)=>s+a.usdcSize,0) + acts.filter(a=>a.type==='MERGE').reduce((s,a)=>s+a.usdcSize,0);
+  const pays = acts.filter(a=>a.type==='REDEEM'||a.type==='REWARD').reduce((s,a)=>s+a.usdcSize,0);
+  const mon = {}, mkt = {};
+  acts.forEach(a=>{
+    const d = new Date(a.timestamp*1000).toISOString().slice(0,10);
+    a._date = d;
+    mon[d.slice(0,7)] = (mon[d.slice(0,7)]||0) + flow(a);
+    const key = a.title || 'Unknown market';
+    mkt[key] = (mkt[key]||0) + flow(a);
+  });
+  const ranked = Object.keys(mkt).map(k=>({name:k, pnl:+mkt[k].toFixed(2)})).sort((a,b)=>a.pnl-b.pnl);
+  const dates = acts.map(a=>a._date).sort();
+  return {net:+(pays+sells-buys).toFixed(2), buys:+buys.toFixed(2), sells:+sells.toFixed(2), pays:+pays.toFixed(2),
+    n:acts.length, first:dates[0], last:dates[dates.length-1],
+    monthly:Object.keys(mon).sort().map(m=>({m, pnl:+mon[m].toFixed(2)})),
+    worst:ranked.slice(0,5), best:ranked.slice(-5).reverse()};
+}
+let pmCharts = [];
+function renderPolymarket(C){
+  $('pmLanding').classList.add('hide'); $('pmDash').classList.remove('hide');
+  pmCharts.forEach(c=>c.destroy()); pmCharts = [];
+  $('pmRange').textContent = `${C.n.toLocaleString()} on-chain events · ${C.first} to ${C.last}`;
+  const col = C.net >= 0 ? '#4ade80' : '#f87171';
+  $('pmKpis').innerHTML = [
+    ['Net Cash Flow', `<span style="color:${col}">${C.net<0?'−':''}${fmt$2(Math.abs(C.net))}</span>`, 'sales + redemptions − purchases'],
+    ['Total Purchased', fmt$2(C.buys), 'buys + splits'],
+    ['Redemptions & Rewards', fmt$2(C.pays), 'settled winnings'],
+    ['Sale Proceeds', fmt$2(C.sells), 'sells + merges'],
+  ].map(k=>`<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="detail">${k[2]}</div></div>`).join('');
+  const grid = {color:'#20263380'}, noLegend = {legend:{display:false}};
+  pmCharts.push(new Chart($('pmMon'), {type:'bar', data:{labels:C.monthly.map(x=>x.m), datasets:[{data:C.monthly.map(x=>x.pnl), backgroundColor:C.monthly.map(x=>x.pnl>=0?'#4ade80':'#f87171'), borderRadius:4}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false}}, y:{grid}}}}));
+  pmCharts.push(new Chart($('pmFlow'), {type:'bar', data:{labels:['Bought','Redeemed','Sold'], datasets:[{data:[C.buys,C.pays,C.sells], backgroundColor:['#f87171','#4ade80','#60a5fa'], borderRadius:4}]}, options:{indexAxis:'y', maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid}, y:{grid:{display:false}}}}}));
+  const row = x=>`<tr><td><span class="ticker" style="max-width:420px">${x.name}</span></td><td class="num" style="color:${x.pnl>=0?'#4ade80':'#f87171'}">${x.pnl.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`;
+  $('pmBest').innerHTML = C.best.map(row).join('');
+  $('pmWorst').innerHTML = C.worst.map(row).join('');
+}
+$('pmGo').addEventListener('click', async ()=>{
+  $('pmErr').textContent = '';
+  const m = /0x[a-fA-F0-9]{40}/.exec($('pmAddr').value);
+  if (!m){ showErr('pmErr', 'That does not contain a valid wallet address (0x followed by 40 characters).'); return; }
+  $('pmGo').disabled = true;
+  try {
+    const acts = await pmFetchAll(m[0]);
+    $('pmStatus').textContent = '';
+    if (!acts.length){ showErr('pmErr', 'No activity found for that address — double-check it, or the account may be brand new.'); }
+    else renderPolymarket(computePolymarket(acts));
+  } catch(e){
+    $('pmStatus').textContent = '';
+    showErr('pmErr', 'Could not reach the Polymarket API (' + e.message + '). Check your connection and try again.');
+  }
+  $('pmGo').disabled = false;
+});
+$('pmReset').addEventListener('click', ()=>{ $('pmDash').classList.add('hide'); $('pmLanding').classList.remove('hide'); $('pmStatus').textContent=''; });
+
+// ===== More venues: universal CSV analyzer =====
+const VENUES = {
+  forecastex: {name:'ForecastEx (IBKR)', help:'In Interactive Brokers: <b>Performance &amp; Reports &rarr; Flex Queries</b> (or Statements &rarr; Activity), export your ForecastEx event-contract trades as <b>CSV</b>, then upload it below.'},
+  robinhood:  {name:'Robinhood', help:'In Robinhood: <b>Account &rarr; Reports and statements &rarr; Reports</b>, generate an account activity report (CSV) covering your prediction/event contracts, then upload it below.'},
+  fanduel:    {name:'FanDuel Predicts', help:'In FanDuel: <b>Account &rarr; Transaction History</b>, set the date range to everything, and use the download/export option if available. If there is only a web page, copy it into a spreadsheet and save as CSV.'},
+  draftkings: {name:'DraftKings', help:'In DraftKings: <b>Account &rarr; Transactions</b>, request your transaction history export (they email a CSV), then upload it below.'},
+  og:         {name:'OG (Crypto.com)', help:'In OG / Crypto.com: open your prediction market <b>Transaction History</b> and use the export option; if none exists, copy the table into a spreadsheet and save as CSV.'},
+  underdog:   {name:'Underdog', help:'In Underdog: <b>Settings &rarr; Account History</b>, request your history export (CSV), then upload it below.'},
+  any:        {name:'Any other CSV', help:'Any CSV works as long as it has a date column, a description column, and a signed amount column. Map them after uploading.'},
+};
+let gRows = null, gHeaders = [], gVenue = 'forecastex', gCharts = [];
+$('venueChips').innerHTML = Object.keys(VENUES).map(k=>`<button class="vchip${k==='forecastex'?' active':''}" data-v="${k}">${VENUES[k].name}</button>`).join('');
+function setVenue(k){
+  gVenue = k;
+  document.querySelectorAll('.vchip').forEach(c=>c.classList.toggle('active', c.dataset.v===k));
+  $('venueHelp').innerHTML = '<b>How to export from ' + VENUES[k].name + ':</b><br>' + VENUES[k].help;
+}
+document.querySelectorAll('.vchip').forEach(c=>c.addEventListener('click', ()=>setVenue(c.dataset.v)));
+setVenue('forecastex');
+
+function gNum(x){
+  if (x==null) return NaN;
+  let s = String(x).trim().replace(/[$,\s]/g,'');
+  let neg = false;
+  if (/^\(.*\)$/.test(s)){ neg = true; s = s.slice(1,-1); }
+  const v = parseFloat(s);
+  return neg ? -v : v;
+}
+function gDate(x){
+  const d = new Date(x);
+  return isNaN(d) ? null : d.toISOString().slice(0,10);
+}
+function guessCol(headers, patterns){
+  for (const p of patterns){ const hit = headers.find(h=>h.toLowerCase().includes(p)); if (hit) return hit; }
+  return headers[0];
+}
+function gLoadFile(f){
+  Papa.parse(f, {header:true, skipEmptyLines:true, transformHeader:h=>h.replace(/^﻿/,''), complete: res=>{
+    if (!res.data.length){ showErr('gErr', 'That CSV appears to be empty.'); return; }
+    gRows = res.data; gHeaders = Object.keys(res.data[0]);
+    $('gDrop').classList.add('loaded'); $('gState').textContent = '✓ ' + f.name + ' — ' + gRows.length.toLocaleString() + ' rows';
+    const opts = gHeaders.map(h=>`<option>${h}</option>`).join('');
+    $('mapDate').innerHTML = opts; $('mapMarket').innerHTML = opts; $('mapAmt').innerHTML = opts;
+    $('mapDate').value = guessCol(gHeaders, ['date','time']);
+    $('mapMarket').value = guessCol(gHeaders, ['description','market','instrument','event','title','name']);
+    $('mapAmt').value = guessCol(gHeaders, ['amount','total','net','value','proceeds']);
+    $('gMapper').classList.remove('hide');
+    gPreviewUpdate();
+  }});
+}
+function gParsed(){
+  const dc = $('mapDate').value, mc = $('mapMarket').value, ac = $('mapAmt').value;
+  const flip = $('mapSign').value === 'pos' ? -1 : 1;
+  return gRows.map(r=>({date:gDate(r[dc]), market:(r[mc]||'Unknown').trim()||'Unknown', amt:gNum(r[ac])*flip}))
+    .filter(r=>r.date && !isNaN(r.amt));
+}
+function gPreviewUpdate(){
+  const p = gParsed();
+  const rows = p.slice(0,5).map(r=>`<tr><td>${r.date}</td><td><span class="ticker" style="max-width:280px">${r.market}</span></td><td class="num" style="color:${r.amt>=0?'#4ade80':'#f87171'}">${r.amt.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`).join('');
+  $('gPreview').innerHTML = p.length
+    ? `<div style="color:#4ade80;font-size:.85rem;font-weight:600;margin-bottom:8px">✓ ${p.length.toLocaleString()} usable rows</div><div class="card" style="padding:10px"><table><thead><tr><th>Date</th><th>Market</th><th class="num">Cash flow</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div style="color:#f87171;font-size:.85rem">No usable rows with this mapping — check the date and amount columns.</div>';
+}
+['mapDate','mapMarket','mapAmt','mapSign'].forEach(id=>$(id).addEventListener('change', gPreviewUpdate));
+$('gDrop').addEventListener('click', ()=>$('gFile').click());
+['dragover','dragenter'].forEach(ev=>$('gDrop').addEventListener(ev, e=>{e.preventDefault(); $('gDrop').classList.add('over');}));
+['dragleave','drop'].forEach(ev=>$('gDrop').addEventListener(ev, e=>{e.preventDefault(); $('gDrop').classList.remove('over');}));
+$('gDrop').addEventListener('drop', e=>{ if(e.dataTransfer.files.length) gLoadFile(e.dataTransfer.files[0]); });
+$('gFile').addEventListener('change', e=>{ if(e.target.files.length) gLoadFile(e.target.files[0]); e.target.value=''; });
+$('gGo').addEventListener('click', ()=>{
+  const p = gParsed();
+  if (p.length < 2){ showErr('gErr', 'Not enough usable rows — check your column mapping.'); return; }
+  $('gErr').textContent = '';
+  const mon = {}, mkt = {};
+  let inflow = 0, outflow = 0;
+  p.forEach(r=>{
+    mon[r.date.slice(0,7)] = (mon[r.date.slice(0,7)]||0) + r.amt;
+    mkt[r.market] = (mkt[r.market]||0) + r.amt;
+    if (r.amt >= 0) inflow += r.amt; else outflow += -r.amt;
+  });
+  const ranked = Object.keys(mkt).map(k=>({name:k, pnl:+mkt[k].toFixed(2)})).sort((a,b)=>a.pnl-b.pnl);
+  const dates = p.map(r=>r.date).sort();
+  const net = +(inflow-outflow).toFixed(2);
+  $('gLanding').classList.add('hide'); $('gDash').classList.remove('hide');
+  gCharts.forEach(c=>c.destroy()); gCharts=[];
+  $('gTitle').textContent = 'Your ' + VENUES[gVenue].name + ' Dashboard';
+  $('gRange').textContent = `${p.length.toLocaleString()} transactions · ${dates[0]} to ${dates[dates.length-1]}`;
+  $('gKpis').innerHTML = [
+    ['Net Cash Flow', `<span style="color:${net>=0?'#4ade80':'#f87171'}">${net<0?'−':''}${fmt$2(Math.abs(net))}</span>`, 'money in − money out'],
+    ['Money In', fmt$2(inflow), 'payouts, sales, credits'],
+    ['Money Out', fmt$2(outflow), 'purchases, entries, fees'],
+    ['Markets Touched', Object.keys(mkt).length.toLocaleString(), 'unique descriptions'],
+  ].map(k=>`<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="detail">${k[2]}</div></div>`).join('');
+  const grid = {color:'#20263380'}, noLegend = {legend:{display:false}};
+  const months = Object.keys(mon).sort();
+  gCharts.push(new Chart($('gMon'), {type:'bar', data:{labels:months, datasets:[{data:months.map(m=>+mon[m].toFixed(2)), backgroundColor:months.map(m=>mon[m]>=0?'#4ade80':'#f87171'), borderRadius:4}]}, options:{maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid:{display:false}}, y:{grid}}}}));
+  gCharts.push(new Chart($('gFlow'), {type:'bar', data:{labels:['In','Out'], datasets:[{data:[+inflow.toFixed(2),+outflow.toFixed(2)], backgroundColor:['#4ade80','#f87171'], borderRadius:4}]}, options:{indexAxis:'y', maintainAspectRatio:false, plugins:noLegend, scales:{x:{grid}, y:{grid:{display:false}}}}}));
+  const row = x=>`<tr><td><span class="ticker" style="max-width:420px">${x.name}</span></td><td class="num" style="color:${x.pnl>=0?'#4ade80':'#f87171'}">${x.pnl.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>`;
+  $('gBest').innerHTML = ranked.slice(-5).reverse().map(row).join('');
+  $('gWorst').innerHTML = ranked.slice(0,5).map(row).join('');
+});
+$('gReset').addEventListener('click', ()=>{ $('gDash').classList.add('hide'); $('gLanding').classList.remove('hide'); });
+
+// ===== bug report form =====
+// Uses Formspree: create a free form at formspree.io and paste its ID below to activate.
+const BUG_ENDPOINT = 'https://formspree.io/f/xqevnzev';
+function openBug(){ $('bugModal').classList.remove('hide'); $('bugStatus').textContent=''; }
+function closeBug(){ $('bugModal').classList.add('hide'); }
+$('bugModal').addEventListener('click', e=>{ if (e.target === $('bugModal')) closeBug(); });
+$('bugSend').addEventListener('click', async ()=>{
+  const what = $('bugWhat').value.trim();
+  if (!what){ $('bugStatus').textContent = 'Please describe what happened.'; $('bugStatus').style.color='#f87171'; return; }
+  const activeTab = document.querySelector('.tab.active');
+  const payload = {what, email: $('bugEmail').value.trim(), venue: activeTab ? activeTab.textContent : '', browser: navigator.userAgent, page: 'TrueLedger analyzer'};
+  $('bugSend').disabled = true; $('bugStatus').style.color = 'var(--muted)'; $('bugStatus').textContent = 'Sending…';
+  try {
+    if (BUG_ENDPOINT.includes('YOUR_FORM_ID')) throw new Error('form not configured');
+    const r = await fetch(BUG_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body:JSON.stringify(payload)});
+    if (!r.ok) throw new Error('send failed');
+    $('bugStatus').style.color = '#4ade80'; $('bugStatus').textContent = '✓ Sent — thank you!';
+    $('bugWhat').value = ''; setTimeout(closeBug, 1500);
+  } catch(e){
+    $('bugStatus').style.color = '#f87171'; $('bugStatus').textContent = 'Could not send right now — please try again later.';
+  }
+  $('bugSend').disabled = false;
+});
+</script>
+<div id="bugModal" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;padding:26px">
+    <h2 style="font-size:1.15rem;margin-bottom:4px">🐞 Report a bug</h2>
+    <div style="color:var(--muted);font-size:.82rem;margin-bottom:16px">Nothing from your trading data is sent — only what you type here.</div>
+    <label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">What happened?</label>
+    <textarea id="bugWhat" style="width:100%;min-height:80px;background:#11141c;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;margin:5px 0 12px;font-family:inherit;font-size:.86rem"></textarea>
+    <label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Your email (optional, for follow-up)</label>
+    <input id="bugEmail" type="email" style="width:100%;background:#11141c;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;margin:5px 0 16px;font-size:.86rem">
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeBug()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 18px;font-size:.85rem;cursor:pointer">Cancel</button>
+      <button id="bugSend" class="btn" style="margin-top:0">Send report</button>
+    </div>
+    <div id="bugStatus" style="font-size:.8rem;margin-top:10px;min-height:1.1em"></div>
+  </div>
+</div>
+<footer style="border-top:1px solid var(--border);margin-top:48px;padding:20px 0;color:var(--muted);font-size:.76rem;text-align:center">TrueLedger &middot; runs entirely in your browser &middot; <a href="#" onclick="openBug();return false" style="color:#60a5fa">report a bug</a> &middot; not affiliated with any exchange &middot; not financial advice</footer>
+<script>
+// Collapse marketing section once any dashboard is shown; restore on reset
+(function(){
+  const mkt = document.getElementById('mkt');
+  const dashes = ['dash','cbDash','pmDash','gDash'].map(id=>document.getElementById(id)).filter(Boolean);
+  const sync = ()=>{
+    const open = dashes.some(d=>!d.classList.contains('hide'));
+    mkt.classList.toggle('hide', open);
+    if(open) window.scrollTo({top:0,behavior:'instant'});
+  };
+  const obs = new MutationObserver(sync);
+  dashes.forEach(d=>obs.observe(d,{attributes:true,attributeFilter:['class']}));
+})();
+</script>
+</body>
+</html>
