@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why Kalshi's "Profit" Column Isn't Profit — How to Calculate Your Real Kalshi P&L</title>
+<meta name="description" content="Kalshi's settlement export labels gross payout as 'Profit' — it can overstate your results by thousands. Learn how to calculate your true Kalshi P&L from cost basis, including fees, with a free browser-based analyzer.">
+<link rel="canonical" href="https://truepl.io/kalshi-profit-explained.html">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230e1117%22/><text x=%2250%22 y=%2272%22 font-size=%2260%22 font-weight=%22bold%22 text-anchor=%22middle%22 fill=%22%234ade80%22 font-family=%22Segoe UI,sans-serif%22>P</text></svg>">
+<meta property="og:title" content="Why Kalshi's 'Profit' Column Isn't Profit">
+<meta property="og:description" content="One trader's export said +$25,683. Real P&L after cost basis and fees: −$3,715. Here's how Kalshi's numbers work — and how to check yours free.">
+<meta property="og:url" content="https://truepl.io/kalshi-profit-explained.html">
+<meta property="og:type" content="article">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is the Profit column in Kalshi's export my actual profit?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. In Kalshi's settlement export, the column commonly read as profit shows your gross payout — the total dollars returned when a market settles — not payout minus what you paid for the contracts. To get real profit you must subtract your cost basis and fees."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I calculate my real Kalshi P&L?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Real realized P&L per settlement = payout − (contracts held × average price paid). Then subtract trading fees and any deposit fees for your true net result. TruePL computes this automatically from your Kalshi activity and settlements CSV exports, entirely in your browser."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is TruePL free and private?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. TruePL is a free single-page tool that runs 100% in your browser. Your CSV files are parsed locally and never uploaded — there is no server to send anything to."
+      }
+    }
+  ]
+}
+</script>
+<style>
+:root{--bg:#0e1117;--card:#171b24;--border:#262b38;--text:#e6e9f0;--muted:#8b93a7;--green:#4ade80;--red:#f87171}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.7}
+.wrap{max-width:760px;margin:0 auto;padding:0 24px 80px}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;margin-bottom:24px}
+.logo{font-weight:700;font-size:1.15rem;color:var(--text);text-decoration:none}
+.logo span{color:var(--green)}
+.cta{background:var(--green);color:#0e1117;font-weight:600;padding:10px 22px;border-radius:10px;text-decoration:none;font-size:.9rem;display:inline-block}
+.cta:hover{background:#6ee7a0}
+h1{font-size:2rem;line-height:1.25;margin:18px 0 10px}
+.byline{color:var(--muted);font-size:.85rem;margin-bottom:28px}
+h2{font-size:1.35rem;margin:36px 0 12px}
+p{margin-bottom:16px}
+p.lead{font-size:1.1rem;color:var(--muted)}
+.stat-row{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+.stat{flex:1;min-width:150px;text-align:center;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.stat .l{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+.stat .v{font-size:1.4rem;font-weight:700;margin-top:4px}
+.callout{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:10px;padding:16px 20px;margin:20px 0}
+code{background:#1c2130;border:1px solid #2c3550;border-radius:6px;padding:2px 8px;font-size:.9em}
+.formula{background:#11141c;border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin:16px 0;font-family:ui-monospace,monospace;font-size:.9rem;overflow-x:auto}
+.final-cta{text-align:center;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:36px 24px;margin-top:48px}
+.final-cta h2{margin-top:0}
+.final-cta p{color:var(--muted)}
+footer{border-top:1px solid var(--border);margin-top:60px;padding:20px 0;color:var(--muted);font-size:.78rem;text-align:center}
+a{color:#60a5fa}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="logo" href="/">True<span>PL</span></a>
+  <a class="cta" href="/">Analyze my trades — free</a>
+</nav>
+
+<h1>Why Kalshi's "Profit" column isn't profit</h1>
+<div class="byline">And how to calculate your real prediction-market P&amp;L in under a minute</div>
+
+<p class="lead">If you've downloaded your settlement history from Kalshi and felt great about the green numbers, read this before you celebrate. The column most traders read as profit is actually <b>gross payout</b> — and the difference can be enormous.</p>
+
+<div class="stat-row">
+  <div class="stat"><div class="l">What the export says</div><div class="v" style="color:var(--green)">+$25,683</div></div>
+  <div class="stat"><div class="l">True P&amp;L (cost basis)</div><div class="v" style="color:var(--red)">−$2,800</div></div>
+  <div class="stat"><div class="l">After all fees</div><div class="v" style="color:var(--red)">−$3,715</div></div>
+</div>
+<p style="color:var(--muted);font-size:.85rem;text-align:center">A real example from an actual Kalshi account export — a $29,000 gap between the headline number and reality.</p>
+
+<h2>What the export actually shows</h2>
+<p>When a Kalshi event contract settles in your favor, each contract pays out $1.00. Kalshi's settlement export records the total dollars returned to you at settlement. If you held 1,000 winning contracts, the export shows <code>+$1,000</code> — regardless of what you paid for them.</p>
+<p>But you didn't get $1,000 of profit. If you bought those contracts at 95¢, you paid $950 — so your actual gain was $50, not $1,000. Every settled market in the export inflates your apparent results this way. The more you trade, the bigger the illusion grows.</p>
+
+<h2>The real formula</h2>
+<div class="formula">real P&amp;L per settlement = payout − (contracts held × average price paid)<br>net P&amp;L = real P&amp;L − trading fees − deposit fees</div>
+<p>Two things make this tedious to compute by hand. First, your average cost per contract lives in a different export (the activity file) than your settlements. Second, fees accumulate quietly across hundreds of trades — trading fees on each fill, plus deposit fees — and none of them appear in the settlement totals.</p>
+
+<div class="callout"><b>Rule of thumb:</b> if you tend to buy heavy favorites (contracts priced 90¢+), your gross payout will dwarf your actual profit — you're collecting many small edges, and the export makes each one look like a windfall.</div>
+
+<h2>Why this matters</h2>
+<p>Traders make decisions based on the score they think they have. If your mental ledger says +$25k while your bank account quietly disagrees, you'll size bets wrong, chase categories that are actually losing you money, and underestimate how much fees are eating your returns. Knowing your real number is the single highest-value piece of information in your trading.</p>
+
+<h2>Check your real number in under a minute</h2>
+<p><a href="/">TruePL</a> is a free analyzer that computes true cost-basis P&amp;L from your Kalshi exports: download your <b>activity</b> and <b>settlements</b> CSVs from Kalshi, drop both files onto the page, and you get your real P&amp;L (before and after fees), win rate, average win vs. average loss, P&amp;L by category, fee accumulation over time, and your biggest wins and losses.</p>
+<p>Everything runs in your browser. Your files are never uploaded — there's no server, no account, and no tracking. Close the tab and it's gone.</p>
+
+<div class="final-cta">
+  <h2>Most traders don't know their real number.</h2>
+  <p>Takes under a minute to find out yours.</p>
+  <a class="cta" href="/">Get my true P&amp;L — free</a>
+</div>
+
+<footer>TruePL · runs entirely in your browser · not affiliated with any exchange · not financial advice — informational tool only</footer>
+</div>
+</body>
+</html>
