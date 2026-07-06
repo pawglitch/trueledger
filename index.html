@@ -161,7 +161,8 @@ html{scroll-behavior:smooth}
     1. Log in at kalshi.com and open your <b>Activity</b> page<br>
     2. Download the CSV export of <b>all activity</b> (trades, deposits, credits)<br>
     3. Download the <b>settlements</b> export too — that's what unlocks true P&amp;L<br>
-    4. Drop each file into its box above &mdash; both are required
+    4. Drop each file into its box above &mdash; both are required<br>
+    <span style="opacity:.8">Have the newer single <b>Transactions</b> export (realized P&amp;L per position)? Drop that one file anywhere above &mdash; it works on its own.</span>
   </div>
   <div class="privacy">🔒 100% private — everything runs in your browser. Your data never leaves your computer.</div>
 </div>
@@ -184,7 +185,7 @@ html{scroll-behavior:smooth}
     <div class="card span4"><h2>Trades by Hour of Day (PT)</h2><div class="chart-box"><canvas id="cHour"></canvas></div></div>
     <div class="card span4"><h2>Entry Price Distribution (&cent;)</h2><div class="chart-box"><canvas id="cPrice"></canvas></div></div>
     <div class="card span6"><h2>Cumulative Fees ($)</h2><div class="chart-box"><canvas id="cFees"></canvas></div></div>
-    <div class="card span6"><h2>Deposits ($)</h2><div class="chart-box"><canvas id="cDeps"></canvas></div></div>
+    <div class="card span6" id="cardDeps"><h2>Deposits ($)</h2><div class="chart-box"><canvas id="cDeps"></canvas></div></div>
     <div class="card span6"><h2>Top 10 Biggest Bets (single trades)</h2><table><thead><tr><th>Date</th><th>Market</th><th>Dir</th><th class="num">Price &cent;</th><th class="num">Size $</th></tr></thead><tbody id="sizeRows"></tbody></table></div>
     <div class="card span6"><h2>Top 10 Most-Traded Markets (frequency)</h2><table><thead><tr><th>Market</th><th>Category</th><th class="num">Trades</th><th class="num">Volume $</th></tr></thead><tbody id="freqRows"></tbody></table></div>
     <div class="card span12"><h2>Top 15 Markets by Volume</h2><table><thead><tr><th>Market</th><th>Category</th><th class="num">Trades</th><th class="num">Volume $</th><th class="num">Fees $</th></tr></thead><tbody id="mktRows"></tbody></table></div>
@@ -491,17 +492,84 @@ function computeAll(actRows, settRows){
   return D;
 }
 
-
+// ---- Kalshi "Transactions" export (single file, per-fill realized P&L) ----
+function computeFromTransactions(rows){
+  const trades = rows.filter(r=>r.type==='trade');
+  const credits = rows.filter(r=>r.type==='credit');
+  if (!trades.length) return null;
+  const trec = trades.map(r=>{
+    const qty=num(r.quantity_fp), entry=num(r.entry_price_dollars);
+    return {date:(r.open_timestamp||'').slice(0,10), closeDate:(r.close_timestamp||'').slice(0,10),
+      hour:((new Date(r.open_timestamp).getUTCHours()||0)-7+24)%24,
+      amt:qty*entry, fee:num(r.open_fees_dollars)+num(r.close_fees_dollars),
+      ticker:r.market_ticker||'', cat:category(r.market_ticker),
+      dir:r.side==='yes'?'Yes':'No', ot:'', price:entry*100,
+      pnl:num(r.realized_pnl_without_fees_dollars), pnlF:num(r.realized_pnl_with_fees_dollars)};
+  });
+  const daily = {};
+  trec.forEach(t=>{ const d = daily[t.date] = daily[t.date]||{vol:0,fees:0,n:0}; d.vol+=t.amt; d.fees+=t.fee; d.n++; });
+  const dailyList = Object.keys(daily).sort().map(k=>({date:k, vol:+daily[k].vol.toFixed(2), fees:+daily[k].fees.toFixed(2), n:daily[k].n}));
+  const cats = {};
+  trec.forEach(t=>{ const c = cats[t.cat] = cats[t.cat]||{vol:0,fees:0,n:0}; c.vol+=t.amt; c.fees+=t.fee; c.n++; });
+  const catList = Object.keys(cats).map(k=>({cat:k, vol:+cats[k].vol.toFixed(2), fees:+cats[k].fees.toFixed(2), n:cats[k].n})).sort((a,b)=>b.vol-a.vol);
+  const hours = Array.from({length:24},(_,h)=>({h, n:0}));
+  trec.forEach(t=>{ hours[t.hour].n++; });
+  const prices = Array.from({length:10},(_,b)=>({b:`${b*10}-${b*10+9}¢`, n:0}));
+  trec.forEach(t=>{ if(t.price>0) prices[Math.min(Math.floor(t.price/10),9)].n++; });
+  const mkts = {};
+  trec.forEach(t=>{ const m = mkts[t.ticker] = mkts[t.ticker]||{vol:0,fees:0,n:0,cat:t.cat}; m.vol+=t.amt; m.fees+=t.fee; m.n++; });
+  const topMkts = Object.keys(mkts).map(k=>({ticker:k, name:humanize(k), vol:+mkts[k].vol.toFixed(2), fees:+mkts[k].fees.toFixed(2), n:mkts[k].n, cat:mkts[k].cat})).sort((a,b)=>b.vol-a.vol).slice(0,15);
+  const topSize = trec.slice().sort((a,b)=>b.amt-a.amt).slice(0,10).map(t=>({date:t.date, ticker:t.ticker, name:humanize(t.ticker), cat:t.cat, dir:t.dir, price:+t.price.toFixed(0), amt:+t.amt.toFixed(2)}));
+  const topFreq = Object.keys(mkts).map(k=>({ticker:k, name:humanize(k), n:mkts[k].n, vol:+mkts[k].vol.toFixed(2), cat:mkts[k].cat})).sort((a,b)=>b.n-a.n).slice(0,10);
+  const priced = trec.filter(t=>t.price>0);
+  const summary = {
+    n_trades: trades.length, volume: +trec.reduce((a,t)=>a+t.amt,0).toFixed(2),
+    trade_fees: +trec.reduce((a,t)=>a+t.fee,0).toFixed(2),
+    deposits_total: 0, deposit_fees: 0, n_deposits: 0,
+    credits_total: +credits.reduce((a,r)=>a+num(r.realized_pnl_with_fees_dollars),0).toFixed(2),
+    yes: trec.filter(t=>t.dir==='Yes').length, no: trec.filter(t=>t.dir==='No').length,
+    taker: 0, maker: 0,
+    avg_trade: +(trec.reduce((a,t)=>a+t.amt,0)/trec.length).toFixed(2),
+    first_date: dailyList[0].date, last_date: dailyList[dailyList.length-1].date, n_days_active: dailyList.length,
+    avg_price: priced.length ? +(priced.reduce((a,t)=>a+t.price,0)/priced.length).toFixed(1) : 0,
+  };
+  // positions = fills aggregated by market + close date
+  const posMap = {};
+  trec.forEach(t=>{ const k = t.ticker+'|'+t.closeDate;
+    const p = posMap[k] = posMap[k]||{date:t.closeDate, ticker:t.ticker, name:humanize(t.ticker), cat:t.cat, pnl:0};
+    p.pnl+=t.pnl; });
+  const srec = Object.values(posMap).map(p=>({...p, pnl:+p.pnl.toFixed(2)})).sort((a,b)=>a.date<b.date?-1:1);
+  const wins = srec.filter(s=>s.pnl>0.005), losses = srec.filter(s=>s.pnl<-0.005);
+  const pd = {}; srec.forEach(s=>{ pd[s.date]=(pd[s.date]||0)+s.pnl; });
+  const pnlDaily = Object.keys(pd).sort().map(k=>({date:k, pnl:+pd[k].toFixed(2)}));
+  const pc = {}; srec.forEach(s=>{ const c = pc[s.cat]=pc[s.cat]||{pnl:0,n:0,w:0}; c.pnl+=s.pnl; c.n++; if(s.pnl>0.005)c.w++; });
+  const pnlCat = Object.keys(pc).map(k=>({cat:k, pnl:+pc[k].pnl.toFixed(2), n:pc[k].n, w:pc[k].w})).sort((a,b)=>a.pnl-b.pnl);
+  const feeByDate = {}; trec.forEach(t=>{ feeByDate[t.closeDate]=(feeByDate[t.closeDate]||0)+t.fee; });
+  const allDates = [...new Set([...Object.keys(feeByDate), ...pnlDaily.map(x=>x.date)])].sort();
+  const pnlByDate = {}; pnlDaily.forEach(x=>{ pnlByDate[x.date]=x.pnl; });
+  const daily2 = allDates.map(dt=>({date:dt, pnl:pnlByDate[dt]||0, fee:+(feeByDate[dt]||0).toFixed(2)}));
+  const net = +trec.reduce((a,t)=>a+t.pnl,0).toFixed(2);
+  const pnl = {net, n_settlements:srec.length, wins:wins.length, losses:losses.length,
+    win_rate: +(100*wins.length/Math.max(wins.length+losses.length,1)).toFixed(1),
+    avg_win: wins.length ? +(wins.reduce((a,s)=>a+s.pnl,0)/wins.length).toFixed(2) : 0,
+    avg_loss: losses.length ? +(losses.reduce((a,s)=>a+s.pnl,0)/losses.length).toFixed(2) : 0,
+    gross_won: +wins.reduce((a,s)=>a+s.pnl,0).toFixed(2), gross_lost: +losses.reduce((a,s)=>a+s.pnl,0).toFixed(2),
+    daily: pnlDaily, cat: pnlCat, daily2,
+    best: srec.slice().sort((a,b)=>b.pnl-a.pnl).slice(0,5), worst: srec.slice().sort((a,b)=>a.pnl-b.pnl).slice(0,5),
+    net_after_fees: +trec.reduce((a,t)=>a+t.pnlF,0).toFixed(2)};
+  return {summary, daily:dailyList, cats:catList, hours, deps:[], prices, top_mkts:topMkts, top_size:topSize, top_freq:topFreq, pnl, balance:null, mode:'txn'};
+}
 
 // ===== UI wiring =====
 const $ = id => document.getElementById(id);
-let fileBucket = {act:null, sett:null};
+let fileBucket = {act:null, sett:null, txn:null};
 const BUG_LINK = ' <a href="#" onclick="openBug();return false" style="color:#60a5fa">If this looks like a bug, report it</a> and we\'ll fix it.';
 const showErr = (id, msg) => { $(id).innerHTML = msg ? msg + ' —' + BUG_LINK : ''; };
 let liveCharts = [];
 
 function classify(rows){
   if (!rows.length) return 'unknown';
+  if (rows[0].realized_pnl_with_fees_dollars !== undefined && rows.some(r=>r.type==='trade')) return 'txn';
   const types = new Set(rows.map(r=>r.type));
   if (types.has('Settlement')) return 'sett';
   if (types.has('Trade') || types.has('Order') || types.has('Deposit')) return 'act';
@@ -518,14 +586,22 @@ function handleFiles(files){
   [...files].forEach(f=>{
     Papa.parse(f, {header:true, skipEmptyLines:true, transformHeader:h=>h.replace(/^﻿/,''), complete: res=>{
       const kind = classify(res.data);
-      if (kind==='sett'){ fileBucket.sett = res.data; markZone('sett', f.name); }
+      if (kind==='txn'){ fileBucket.txn = res.data; markZone('act', f.name); $('stateSett').textContent = 'not needed for this export'; }
+      else if (kind==='sett'){ fileBucket.sett = res.data; markZone('sett', f.name); }
       else if (kind==='act'){ fileBucket.act = res.data; markZone('act', f.name); }
-      else { showErr('err', `"${f.name}" doesn't look like a Kalshi export (no type column with Trade/Settlement rows)`); return; }
+      else { showErr('err', `"${f.name}" doesn't look like a Kalshi export (no type column with Trade/Settlement/trade rows)`); return; }
       tryRender();
     }});
   });
 }
 function tryRender(){
+  if (fileBucket.txn){
+    let D;
+    try { D = computeFromTransactions(fileBucket.txn); }
+    catch(e){ showErr('err', 'Could not parse: ' + e.message); return; }
+    if (!D){ showErr('err', 'No trade rows found in the transactions file — is it the right export?'); return; }
+    render(D); return;
+  }
   const missing = [];
   if (!fileBucket.act) missing.push('activity');
   if (!fileBucket.sett) missing.push('settlements');
@@ -544,7 +620,7 @@ function tryRender(){
   el.addEventListener('drop', e=>handleFiles(e.dataTransfer.files));
 });
 $('fileInput').addEventListener('change', e=>{ handleFiles(e.target.files); e.target.value=''; });
-$('reset').addEventListener('click', ()=>{ fileBucket={act:null,sett:null}; $('fileStatus').textContent=''; $('fileInput').value='';
+$('reset').addEventListener('click', ()=>{ fileBucket={act:null,sett:null,txn:null}; $('fileStatus').textContent=''; $('fileInput').value='';
   ['dropAct','dropSett'].forEach(id=>$(id).classList.remove('loaded'));
   $('stateAct').textContent = $('stateSett').textContent = 'click or drop file';
   liveCharts.forEach(c=>c.destroy()); liveCharts=[]; $('dash').classList.add('hide'); $('landing').classList.remove('hide'); });
@@ -561,7 +637,11 @@ function render(D){
   const S = D.summary, P = D.pnl, B = D.balance;
   const hasPnl = !!P;
   document.querySelectorAll('.needs-pnl').forEach(el=>el.classList.toggle('hide', !hasPnl));
+  $('cardDeps').classList.toggle('hide', D.mode==='txn');
   $('pnlNote').classList.toggle('hide', !hasPnl);
+  $('pnlNote').innerHTML = D.mode==='txn'
+    ? '<b>Note:</b> P&amp;L comes from the realized-P&amp;L columns of Kalshi\'s Transactions export (per closed position, true cost basis). This export doesn\'t include deposits, so no balance estimate is shown.'
+    : '<b>Note:</b> P&amp;L is computed from settlement cost basis (payout minus average cost of contracts held). Kalshi\'s raw "Profit" column shows gross payout only &mdash; figures here are true net realized P&amp;L. Balance is estimated from deposits + credits + P&amp;L &minus; fees; check Kalshi for the exact figure.';
   $('noSettNote').classList.toggle('hide', hasPnl);
   $('daterange').textContent = `Activity from ${S.first_date} to ${S.last_date} · ${S.n_days_active} active trading days`;
 
@@ -570,17 +650,17 @@ function render(D){
   const kpis = [];
   if (hasPnl){
     const pnlColor = P.net >= 0 ? '#4ade80' : '#f87171';
-    kpis.push(['Est. Current Balance', `<span style="color:${B.est>=0?'#4ade80':'#f87171'}">${fmt$2(B.est)}</span>`, 'incl. ~'+fmt$2(B.open_cost)+' in '+B.open_n+' open positions (at cost)']);
-    kpis.push(['Realized P&L (before fees)', `<span style="color:${pnlColor}">${P.net<0?'−':''}${fmt$2(Math.abs(P.net))}</span>`, P.n_settlements+' settlements']);
+    if (B) kpis.push(['Est. Current Balance', `<span style="color:${B.est>=0?'#4ade80':'#f87171'}">${fmt$2(B.est)}</span>`, 'incl. ~'+fmt$2(B.open_cost)+' in '+B.open_n+' open positions (at cost)']);
+    kpis.push(['Realized P&L (before fees)', `<span style="color:${pnlColor}">${P.net<0?'−':''}${fmt$2(Math.abs(P.net))}</span>`, P.n_settlements+(D.mode==='txn'?' closed positions':' settlements')]);
     kpis.push(['Realized P&L (after fees)', `<span style="color:${P.net_after_fees>=0?'#4ade80':'#f87171'}">${P.net_after_fees<0?'−':''}${fmt$2(Math.abs(P.net_after_fees))}</span>`, 'incl. '+fmt$2(S.trade_fees)+' trading + '+fmt$2(S.deposit_fees)+' deposit fees']);
     kpis.push(['Win Rate', P.win_rate+'%', P.wins+'W / '+P.losses+'L']);
     kpis.push(['Avg Win / Loss', fmt$2(P.avg_win)+' / '+fmt$2(Math.abs(P.avg_loss)), fmt$2(P.gross_won)+' won, '+fmt$2(Math.abs(P.gross_lost))+' lost']);
   }
-  kpis.push(['Total Deposited', fmt$2(S.deposits_total), S.n_deposits+' deposits']);
+  if (D.mode!=='txn') kpis.push(['Total Deposited', fmt$2(S.deposits_total), S.n_deposits+' deposits']);
   kpis.push(['Trading Volume', fmt$(S.volume), S.n_trades+' trades']);
-  kpis.push(['Total Fees', fmt$2(S.trade_fees+S.deposit_fees), fmt$2(S.trade_fees)+' trading + '+fmt$2(S.deposit_fees)+' deposit']);
+  kpis.push(['Total Fees', fmt$2(S.trade_fees+S.deposit_fees), D.mode==='txn' ? 'trading fees (open + close)' : fmt$2(S.trade_fees)+' trading + '+fmt$2(S.deposit_fees)+' deposit']);
   kpis.push(['Avg Trade Size', fmt$2(S.avg_trade), 'avg entry '+S.avg_price+'¢']);
-  kpis.push(['Yes vs No', S.yes+' / '+S.no, Math.round(100*S.yes/Math.max(S.yes+S.no,1))+'% Yes · '+Math.round(100*S.taker/Math.max(S.taker+S.maker,1))+'% taker']);
+  kpis.push(['Yes vs No', S.yes+' / '+S.no, Math.round(100*S.yes/Math.max(S.yes+S.no,1))+'% Yes'+(S.taker+S.maker ? ' · '+Math.round(100*S.taker/Math.max(S.taker+S.maker,1))+'% taker' : '')]);
   $('kpis').innerHTML = kpis.map(k=>`<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="detail">${k[2]}</div></div>`).join('');
 
   if (hasPnl){
@@ -887,6 +967,7 @@ $('gReset').addEventListener('click', ()=>{ $('gDash').classList.add('hide'); $(
 const BUG_ENDPOINT = 'https://formspree.io/f/xqevnzev';
 function openBug(){ $('bugModal').classList.remove('hide'); $('bugStatus').textContent=''; }
 function closeBug(){ $('bugModal').classList.add('hide'); }
+document.addEventListener('DOMContentLoaded', ()=>{
 $('bugModal').addEventListener('click', e=>{ if (e.target === $('bugModal')) closeBug(); });
 $('bugSend').addEventListener('click', async ()=>{
   const what = $('bugWhat').value.trim();
@@ -904,6 +985,7 @@ $('bugSend').addEventListener('click', async ()=>{
     $('bugStatus').style.color = '#f87171'; $('bugStatus').textContent = 'Could not send right now — please try again later.';
   }
   $('bugSend').disabled = false;
+});
 });
 </script>
 <div id="bugModal" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px">
